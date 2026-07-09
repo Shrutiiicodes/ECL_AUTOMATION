@@ -33,17 +33,7 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 # ----------------------------------------------------------------------------- #
 # CONFIG
 # ----------------------------------------------------------------------------- #
-AS_OF    = date(2026, 7, 7)
-MOB_LIST = list(range(0, 121, 3))
-
-#            label                       fy_start   fy_end    anchor
-WINDOWS = [("FY20-FY23 @ 84M",          "FY20-Q1", "FY23-Q4",  84),
-           ("FY16-FY23 @ 84M",          "FY16-Q1", "FY23-Q4",  84),
-           ("FY16-FY23 @ 120M",         "FY16-Q1", "FY23-Q4", 120)]
-
-HEADLINE = "FY20-FY23 @ 84M"          # window used for the provisional ECL number
-
-fy_key = lambda q: (int(q[2:4]), int(q[-1]))
+from config import *      # AS_OF, MOB_LIST, WINDOWS, HEADLINE, fy_key
 
 # ----------------------------------------------------------------------------- #
 # current exposure = diagonal of TPOS triangle

@@ -21,12 +21,8 @@ import pandas as pd
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
-DB_PATH  = "ecl.db"
-MOB_LIST = list(range(0, 121, 3))
-TOL      = 1e-4
-START_DISB, END_DISB = "2015-04-01", "2026-07-07"
-anchors_for = lambda a: list(range(12, a + 1, 12))
-fy_key = lambda q: (int(q[2:4]), int(q[-1]))
+from config import *      # DB_PATH, MOB_LIST, TOL, START_DISB, END_DISB,
+                          # ANCHOR_MOBS, anchors_for, fy_key
 
 def fy_q(d):
     d = pd.Timestamp(d); m = d.month
@@ -71,7 +67,7 @@ add("TPOS sums (all MOB)", float((feed[tc].fillna(0) - exp[tc].fillna(0)).abs().
 a90 = pd.read_csv("tri_90plus_amt.csv", index_col=0); a90.columns = [int(c) for c in a90.columns]
 atp = pd.read_csv("tri_tpos_amt.csv",  index_col=0); atp.columns = [int(c) for c in atp.columns]
 loss = pd.read_csv("loss_rate.csv").set_index("FY_QUARTER")
-for A in (84, 120):
+for A in ANCHOR_MOBS:
     den = atp[anchors_for(A)].sum(axis=1)
     lr = (a90[A] / den).replace([np.inf, -np.inf], 0).fillna(0)
     add(f"loss_rate {A}M", float((loss[f"LOSS_RATE_{A}M"] - lr.reindex(loss.index)).abs().max()))

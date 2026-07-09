@@ -34,23 +34,9 @@ import numpy as np
 import pandas as pd
 from dateutil.relativedelta import relativedelta
 
-# CONFIG
-SEED       = 34
-N_LOANS    = 60_000
-START      = date(2015, 4, 1)
-AS_OF      = date(2026, 7, 7)          # reporting "today"; drives triangle maturity
-MOB_LIST   = list(range(0, 121, 3))    # 0,3,6,...,120  (41 points)
-SEGMENTS   = [1, 2, 3, 4, 5]
-SEG_DEFAULT_RATE = {1: 0.020, 2: 0.035, 3: 0.055, 4: 0.080, 5: 0.120}
-
-# If True, a loan's TPOS freezes at outstanding-at-default instead of continuing
-# to amortise. More realistic, but breaks exact reconciliation with the old CSV.
-# Keep False for now so Phase 1 output matches your existing wide data.
-FREEZE_TPOS_AT_DEFAULT = False
-
-DB_PATH        = "ecl.db"
-BASE_CSV       = "base_loans.csv"
-PERF_CSV       = "performance_long.csv"
+# CONFIG - all knobs live in config.py
+from config import *      # SEED, N_LOANS, START, AS_OF, MOB_LIST, SEGMENTS, SEG_DEFAULT_RATE,
+                          # FREEZE_TPOS_AT_DEFAULT, DB_PATH, BASE_CSV, PERF_CSV
 
 rng = np.random.default_rng(SEED)
 

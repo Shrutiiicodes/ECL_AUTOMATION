@@ -28,12 +28,7 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 # ----------------------------------------------------------------------------- #
 # CONFIG
 # ----------------------------------------------------------------------------- #
-TRI_90, TRI_TP = "tri_90plus_amt.csv", "tri_tpos_amt.csv"
-FEED_CSV = "DATA_ECL_NEW.csv"
-ANCHOR_MOBS = [84, 120]                      # loss-rate anchors to compute
-
-def anchors_for(a):                          # 12,24,...,a
-    return list(range(12, a + 1, 12))
+from config import *      # TRI_90, TRI_TP, FEED_CSV, ANCHOR_MOBS, anchors_for, ALL_ANCHORS
 
 # ----------------------------------------------------------------------------- #
 # LOAD
@@ -44,7 +39,6 @@ atp = pd.read_csv(TRI_TP, index_col=0); atp.columns = [int(c) for c in atp.colum
 feed = pd.read_csv(FEED_CSV)
 disb = feed.groupby("FY_QUARTER").DISBURSAL_AMT.sum().reindex(a90.index)
 
-ALL_ANCHORS = anchors_for(max(ANCHOR_MOBS))          # 12..120 for the movement tables
 mv90 = a90[ALL_ANCHORS].copy()
 mvtp = atp[ALL_ANCHORS].copy()
 

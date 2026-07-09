@@ -37,11 +37,8 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
-# CONFIG
-FEED_CSV = "DATA_ECL_NEW.csv"
-AS_OF    = date(2026, 7, 7)                 # same as-of used in Phase 0
-MOB_LIST = list(range(0, 121, 3))
-SEGMENT  = None                             # None = total (all segments); or 1..5
+# CONFIG - all knobs live in config.py
+from config import *      # FEED_CSV, AS_OF, MOB_LIST, SEGMENT
 
 # PHASE 2 (folded in): load the summary and slice to a triangle-ready frame
 def load_summary(path=FEED_CSV, segment=None):

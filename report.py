@@ -23,10 +23,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
-AS_OF    = date(2026, 7, 7)
-MOB_LIST = list(range(0, 121, 3))
-ANCHORS  = list(range(12, 121, 12))          # 12..120
-OUT      = "ECL_Report.xlsx"
+from config import *      # AS_OF, MOB_LIST, ANCHORS, OUT
 
 HF   = PatternFill("solid", fgColor="1F4E78"); HFONT = Font(bold=True, color="FFFFFF", size=10)
 IFL  = PatternFill("solid", fgColor="DDEBF7"); IFONT = Font(bold=True, size=10)

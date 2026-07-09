@@ -31,12 +31,7 @@ import sqlite3
 import pandas as pd
 
 # CONFIG
-DB_PATH    = "ecl.db"
-MOB_LIST   = list(range(0, 121, 3))          # change here -> SQL regenerates
-START_DISB = "2015-04-01"                    # disbursal window (last ~10 years)
-END_DISB   = "2026-07-07"
-OUT_CSV    = "DATA_ECL_NEW.csv"
-OUT_SQL    = "phase1_generated.sql"
+from config import *      # DB_PATH, MOB_LIST, START_DISB, END_DISB, OUT_CSV, OUT_SQL
 
 # FY-QUARTER EXPRESSION  (Indian FY, matches data_generation.py exactly)
 # Apr-Jun=Q1, Jul-Sep=Q2, Oct-Dec=Q3, Jan-Mar=Q4.  FY label = ending year.
