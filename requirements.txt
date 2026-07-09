@@ -1,0 +1,5 @@
+numpy
+pandas
+python-dateutil
+openpyxl
+sqlite3
