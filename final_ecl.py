@@ -112,7 +112,7 @@ for i, r in wavg_df.iterrows():
     wc = ws.cell(rr, 8, round(r.WEIGHTED_AVG_LR, 6)); wc.number_format = PC; wc.font = Font(bold=True)
     if r.WEIGHTED_AVG_LR > 1: wc.fill = WARN            # implausible -> flag
     for cc in range(1, 9): ws.cell(rr, cc).alignment = C; ws.cell(rr, cc).border = BD
-r0 = 6 + len(wavg_df)
+r0 = 3 + len(wavg_df)
 ws.cell(r0, 1, "Headline window").font = Font(bold=True); ws.cell(r0, 2, HEADLINE)
 ws.cell(r0 + 1, 1, "Portfolio current TPOS (cr)").font = Font(bold=True)
 ws.cell(r0 + 1, 2, round(portfolio_tpos, 4)).number_format = CR

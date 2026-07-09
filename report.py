@@ -62,9 +62,8 @@ wavg = pd.read_csv("weighted_loss_rate.csv")
 
 wb = Workbook()
 
-def write_triangle(ws, title, sub, matrix, fmt, prefix=""):
-    ws.cell(1, 1, title).font = TITLE; ws.cell(2, 1, sub).font = SUB
-    hr = 4
+def write_triangle(ws, matrix, fmt, prefix=""):
+    hr = 1
     for j, h in enumerate(["FY_QUARTER"] + [f"{prefix}{m}MOB" for m in MOB_LIST], 1):
         c = ws.cell(hr, j, h); c.fill, c.font, c.alignment, c.border = HF, HFONT, C, BD
     for i, q in enumerate(matrix.index):
@@ -109,15 +108,12 @@ for i, row in feed.iterrows():
         c = ws.cell(r, j, row[col]); c.font, c.border = CF, BD
         if col == "LAN_CNT": c.number_format = IN
         elif col not in ("FY_QUARTER", "SEGMENT"): c.number_format = CR
-ws.freeze_panes = "C4"; ws.column_dimensions["A"].width = 12
+ws.freeze_panes = "C2"; ws.column_dimensions["A"].width = 12
 
 # 3-5) triangles ---------------------------------------------------------------
-write_triangle(wb.create_sheet("Pivot_90plus"), "90+ Settlement Amount (crores)",
-               "Chain-ladder completed. Yellow = projected (immature).", a90, CR)
-write_triangle(wb.create_sheet("Pivot_TPOS"), "TPOS (crores)",
-               "Chain-ladder completed. Yellow = projected (immature).", atp, CR)
-write_triangle(wb.create_sheet("BadRate_90plus"), "Bad Rate / PD curve = 90+ / DISBURSAL",
-               "Read left->right = PD development. Yellow = projected.", r90, PC, "PD_")
+write_triangle(wb.create_sheet("Pivot_90plus"), a90, CR)
+write_triangle(wb.create_sheet("Pivot_TPOS"), atp, CR)
+write_triangle(wb.create_sheet("BadRate_90plus"), r90, PC, "PD_")
 
 # 6) Movements -----------------------------------------------------------------
 ws = wb.create_sheet("Movements")
@@ -156,13 +152,11 @@ for col in "BCDEF": ws.column_dimensions[col].width = 16
 
 # 8) Weighted_LR ---------------------------------------------------------------
 ws = wb.create_sheet("Weighted_LR")
-ws.cell(1, 1, "WEIGHTED-AVERAGE LOSS RATE = SUMPRODUCT(LR, DISB) / SUM(DISB)").font = TITLE
-ws.cell(2, 1, "Weights = disbursal amount. Only the FY range and anchor change per window.").font = SUB
 heads = ["WINDOW", "FY_START", "FY_END", "ANCHOR", "N_QTRS", "TOTAL_DISB", "SIMPLE_AVG", "WEIGHTED_AVG"]
 for j, h in enumerate(heads, 1):
-    c = ws.cell(4, j, h); c.fill, c.font, c.alignment, c.border = HF, HFONT, C, BD
+    c = ws.cell(1, j, h); c.fill, c.font, c.alignment, c.border = HF, HFONT, C, BD
 for i, r in wavg.iterrows():
-    rr = 5 + i
+    rr = 2 + i
     ws.cell(rr, 1, r.WINDOW); ws.cell(rr, 2, r.FY_START); ws.cell(rr, 3, r.FY_END)
     ws.cell(rr, 4, int(r.ANCHOR_MOB)); ws.cell(rr, 5, int(r.N_QUARTERS))
     ws.cell(rr, 6, round(r.TOTAL_DISB, 4)).number_format = CR
@@ -170,7 +164,7 @@ for i, r in wavg.iterrows():
     wc = ws.cell(rr, 8, round(r.WEIGHTED_AVG_LR, 6)); wc.number_format = PC; wc.font = Font(bold=True)
     if r.WEIGHTED_AVG_LR > 1: wc.fill = WARN
     for cc in range(1, 9): ws.cell(rr, cc).alignment = C; ws.cell(rr, cc).border = BD
-r0 = 6 + len(wavg)
+r0 = 3 + len(wavg)
 ws.cell(r0, 1, "Portfolio current TPOS (cr)").font = Font(bold=True)
 ws.cell(r0, 2, round(qtr.CURRENT_TPOS.sum(), 4)).number_format = CR
 ws.cell(r0 + 1, 1, "Portfolio ECL (cr) [provisional]").font = Font(bold=True)
