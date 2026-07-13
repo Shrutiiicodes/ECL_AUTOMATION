@@ -86,15 +86,15 @@ def main():
     try:
         with step("Phase 1  SQL refactor"):
             out = sql_refactor.run()
-        with step("Phase 3  chain ladder"):
+        with step("Phase 2  chain ladder"):
             tris = chain_ladder.run(out.feed, SEGMENT)
-        with step("Phase 4  movements + loss rate"):
+        with step("Phase 3  movements + loss rate"):
             lrr = loss_rate.run(tris.a90, tris.atp, out.feed)
-        with step("Phase 5  final ECL"):
+        with step("Phase 4  final ECL"):
             ecl = final_ecl.run(lrr.loss, tris.atp)
-        with step("Phase 6  Excel report"):
+        with step("Phase 5  Excel report"):
             report.build_excel(out.feed, tris, lrr, ecl, REPORT_XLSX)
-        with step("Phase 7  validation"):
+        with step("Phase 6  validation"):
             checks = validation.validate(out.feed, tris, lrr, ecl, DB_PATH)
             validation.write_report(checks, VALIDATION_XLSX)
     except Exception as exc:

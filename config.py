@@ -34,11 +34,11 @@ ANCHORS     = ALL_ANCHORS                       # alias used by report.py
 # observation windows for the disbursal-weighted average loss rate:
 #   (label, fy_start, fy_end, anchor)
 WINDOWS = [
-    # ("FY20-FY23 @ 84M",  "FY20-Q1", "FY23-Q4",  84),
+    ("FY20-FY23 @ 84M",  "FY20-Q1", "FY23-Q4",  84),
     ("FY16-FY23 @ 84M",  "FY16-Q1", "FY23-Q4",  84),
     ("FY16-FY23 @ 120M", "FY16-Q1", "FY23-Q4", 120),
 ]
-HEADLINE = "FY16-FY23 @ 84M"    # window used for the provisional ECL number
+HEADLINE = "FY20-FY23 @ 84M"    # window used for the provisional ECL number
 
 # None = whole book (all segments); or 1..5 for a single segment
 SEGMENT = None

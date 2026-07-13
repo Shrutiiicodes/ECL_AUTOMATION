@@ -22,7 +22,7 @@ fan each loan into ~23 rows and inflate COUNT/SUM. Collapsing to perf_wide first
 keeps the base<->performance join 1:1.
 
 Parameters (edit CONFIG): disbursal window + MOB grid. as-of maturity is handled
-later in Phase 3, not here.
+later in Phase 2, not here.
 
 -------------------------------------------------------------------------------
 This module exposes a PURE function:

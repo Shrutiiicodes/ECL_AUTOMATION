@@ -1,5 +1,5 @@
 """
-PHASE 3 - TRIANGLE + CHAIN-LADDER ENGINE  (modelling core)
+PHASE 2 - TRIANGLE + CHAIN-LADDER ENGINE  (modelling core)
 ==========================================================
 Turns the data_ecl summary into completed run-off triangles for 90+ and
 TPOS, filling the immature (yellow) cells with the bank's exact Excel formula.
@@ -55,7 +55,7 @@ class Triangles(NamedTuple):
 
 
 # --------------------------------------------------------------------------- #
-# PHASE 2 (folded in): collapse the per-segment summary to a triangle-ready frame
+# collapse the per-segment summary to a triangle-ready frame
 # --------------------------------------------------------------------------- #
 def collapse_summary(df: pd.DataFrame, segment=None) -> pd.DataFrame:
     """One row per FY_QUARTER (sum amounts + disbursal + count), FY-sorted."""
@@ -177,7 +177,7 @@ def _print_summary(tris: Triangles) -> None:
     proj = (~mat90).sum().sum()
     tot  = mat90.size
     print("=" * 60)
-    print(f"PHASE 3 COMPLETE   (segment = {SEGMENT or 'ALL'})")
+    print(f"PHASE 2 COMPLETE   (segment = {SEGMENT or 'ALL'})")
     print("=" * 60)
     print(f"triangle shape        : {r90.shape[0]} cohorts x {r90.shape[1]} MOB")
     print(f"cells                 : {tot}  |  observed {tot-proj}  |  projected {proj}")

@@ -57,11 +57,11 @@ validation.validate(out.feed, tris, lrr, ecl, DB_PATH)
 |-------|--------|---------------|----------|
 | 0 | `base_loans.py` | *(standalone script)* | `ecl.db` — synthetic `base_loans` + long `performance` tables |
 | 1 | `sql_refactor.py` | `run() → SqlOutput(feed, sql)` | `data_ecl` summary (one row per FY_QUARTER × SEGMENT); generated SQL replaces ~82 joins |
-| 3 | `chain_ladder.py` | `run() → Triangles(r90, a90, rtp, atp, mat90, mattp, disb, feed)` | Completed 90+ / TPOS triangles (Phase 2 folded in) |
-| 4 | `loss_rate.py` | `run() → LossRates(loss, mv90, mvtp)` | Movement tables + per-quarter loss rate at **84M** and **120M** |
-| 5 | `final_ecl.py` | `run() → FinalECL(by_quarter, wavg, portfolio_tpos, portfolio_ecl)` | Disbursal-weighted average loss rate per observation window |
-| 6 | `report.py` | `build_excel()` | `ECL_Report.xlsx` |
-| 7 | `validation.py` | `validate() → list[Check]` | `validation_report.xlsx` (independent reconciliation) |
+| 2 | `chain_ladder.py` | `run() → Triangles(r90, a90, rtp, atp, mat90, mattp, disb, feed)` | Completed 90+ / TPOS triangles |
+| 3 | `loss_rate.py` | `run() → LossRates(loss, mv90, mvtp)` | Movement tables + per-quarter loss rate at **84M** and **120M** |
+| 4 | `final_ecl.py` | `run() → FinalECL(by_quarter, wavg, portfolio_tpos, portfolio_ecl)` | Disbursal-weighted average loss rate per observation window |
+| 5 | `report.py` | `build_excel()` | `ECL_Report.xlsx` |
+| 6 | `validation.py` | `validate() → list[Check]` | `validation_report.xlsx` (independent reconciliation) |
 
 Phase 0 is **not** part of the ECL computation — it generates synthetic data because we have no real bank data. It runs automatically when `ecl.db` is missing and is skipped otherwise.
 
@@ -115,11 +115,11 @@ ECL-AUTOMATION/
 ├── config.py            ← single source of truth for all shared knobs
 ├── base_loans.py        ← Phase 0: synthetic data generation
 ├── sql_refactor.py      ← Phase 1: generated SQL replacing ~82 joins
-├── chain_ladder.py      ← Phase 3: triangle build + chain-ladder fill
-├── loss_rate.py         ← Phase 4: movement tables + loss rates
-├── final_ecl.py         ← Phase 5: weighted-average loss rate
-├── report.py            ← Phase 6: ECL_Report.xlsx (8 tabs)
-├── validation.py        ← Phase 7: independent reconciliation
+├── chain_ladder.py      ← Phase 2: triangle build + chain-ladder fill
+├── loss_rate.py         ← Phase 3: movement tables + loss rates
+├── final_ecl.py         ← Phase 4: weighted-average loss rate
+├── report.py            ← Phase 5: ECL_Report.xlsx (8 tabs)
+├── validation.py        ← Phase 6: independent reconciliation
 ├── requirements.txt     ← numpy, pandas, python-dateutil, openpyxl
 └── .gitignore           ← all .csv/.xlsx/ecl.db are regenerated artifacts
 ```
