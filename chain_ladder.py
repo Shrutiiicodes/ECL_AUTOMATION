@@ -92,22 +92,25 @@ def max_mature_mob(label, as_of):
 # CHAIN-LADDER FILL  (exact Excel-formula reproduction, down each column)
 # --------------------------------------------------------------------------- #
 def chain_ladder_fill(rate, disb, mature):
-    """rate, mature: DataFrames [quarter x MOB]; disb: Series[quarter]. Returns filled rate."""
+    """ALONG-ROW age-to-age fill (standard chain ladder).
+    Immature cell (ri,cj) = value(ri, cj-1) * devfactor(cj-1 -> cj),
+    where the disbursal-weighted age-to-age factor is estimated from the
+    cohorts ABOVE ri. Cells fill left-to-right so projections feed forward."""
     R = rate.to_numpy(dtype=float).copy()
     M = mature.to_numpy()
     w = disb.to_numpy(dtype=float)
     n_rows, n_cols = R.shape
-    for cj in range(n_cols):
-        for ri in range(n_rows):
+    for ri in range(n_rows):
+        for cj in range(n_cols):
             if M[ri, cj]:
-                continue                                     # observed -> keep
-            if ri == 0:
-                R[ri, cj] = 0.0                              # no cohort above
                 continue
-            prev = R[ri - 1, cj]
-            num = np.nansum(R[:ri,     cj] * w[:ri])          # rows top..R-1
-            den = np.nansum(R[:ri - 1, cj] * w[:ri - 1])      # rows top..R-2
-            R[ri, cj] = prev * num / den if den != 0 else 0.0
+            if cj == 0:
+                R[ri, cj] = 0.0
+                continue
+            prev = R[ri, cj - 1]
+            num = np.nansum(R[:ri, cj]     * w[:ri])   # current MOB, cohorts above
+            den = np.nansum(R[:ri, cj - 1] * w[:ri])   # previous MOB, cohorts above
+            R[ri, cj] = prev * num / den if den != 0 else prev
     return pd.DataFrame(R, index=rate.index, columns=rate.columns)
 
 

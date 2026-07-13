@@ -21,29 +21,62 @@ End-to-end automation of the quarterly PL (NON-PA) ECL: **SQL → Python → Exc
 
 ## What it does
 
-Replaces the manual quarterly process (run SQL, paste to Excel, build pivots, mark yellow cells, drag chain-ladder formulas, build movement tables, compute loss rates, take the weighted average) with a single run that produces a formatted `ECL_Report.xlsx` and a `validation_report.xlsx` proving the run reconciles.
+Replaces the manual quarterly process (run SQL, paste to Excel, build pivots, mark yellow cells, drag chain-ladder formulas, build movement tables, compute loss rates, take the weighted average) with a single run that produces a formatted `ECL_Report.xlsx` (8 tabs) and a `validation_report.xlsx` proving the run reconciles.
 
 ## One-command run
 
 ```
-python run_all.py
+python main.py
 ```
 
-Runs the full pipeline in order, stops on the first failure, prints timings. ≈ 30s on 60k loans.
+Runs the full pipeline **in memory** — every phase is a pure function that takes DataFrames and returns DataFrames; the orchestrator chains the results directly with no intermediate CSVs and no shelling out to scripts. Stops on the first failure, prints timings and a validation summary. ≈ 30s on 60k loans.
 
 **Deliverables:** `ECL_Report.xlsx` (8 tabs) and `validation_report.xlsx` (must be all-PASS before you ship).
 
+## Architecture
+
+All configuration lives in a single file: `config.py`. Every phase script begins with `from config import *` and defines no shared constants of its own. To roll the quarter you change `AS_OF` in `config.py` and nothing else.
+
+Each phase module exposes a **pure function** (`run()` or equivalent) that takes DataFrames in and returns NamedTuples out — no file I/O. The `__main__` block in each script exists only so that phase can still be run and inspected standalone; none of it executes on import.
+
+`main.py` imports all phase modules and chains the results:
+
+```
+ensure_database()          # Phase 0 — only if ecl.db is missing
+out  = sql_refactor.run()
+tris = chain_ladder.run(out.feed, SEGMENT)
+lrr  = loss_rate.run(tris.a90, tris.atp, out.feed)
+ecl  = final_ecl.run(lrr.loss, tris.atp)
+report.build_excel(out.feed, tris, lrr, ecl, REPORT_XLSX)
+validation.validate(out.feed, tris, lrr, ecl, DB_PATH)
+```
+
 ## Phase map
 
-| Phase | Script | Produces |
-|------|--------|----------|
-| 0 | `base_loans.py` | `ecl.db` — raw `base_loans` + long `performance` tables |
-| 1 | `sql_refactor.py` | `DATA_ECL_NEW.csv` — generated SQL replaces ~82 joins; `phase1_generated.sql` |
-| 3 | `chain_ladder.py` | completed 90+/TPOS triangles (Phase 2 folded in) |
-| 4 | `loss_rate.py` | movement tables + per-quarter loss rate at **84M and 120M** |
-| 5 | `final_ecl.py` | **disbursal-weighted average loss rate** per observation window |
-| 6 | `report.py` | `ECL_Report.xlsx` |
-| 7 | `validation.py` | `validation_report.xlsx` (independent reconciliation) |
+| Phase | Script | Pure function | Produces |
+|-------|--------|---------------|----------|
+| 0 | `base_loans.py` | *(standalone script)* | `ecl.db` — synthetic `base_loans` + long `performance` tables |
+| 1 | `sql_refactor.py` | `run() → SqlOutput(feed, sql)` | `DATA_ECL_NEW` summary (one row per FY_QUARTER × SEGMENT); generated SQL replaces ~82 joins |
+| 3 | `chain_ladder.py` | `run() → Triangles(r90, a90, rtp, atp, mat90, mattp, disb, feed)` | Completed 90+ / TPOS triangles (Phase 2 folded in) |
+| 4 | `loss_rate.py` | `run() → LossRates(loss, mv90, mvtp)` | Movement tables + per-quarter loss rate at **84M** and **120M** |
+| 5 | `final_ecl.py` | `run() → FinalECL(by_quarter, wavg, portfolio_tpos, portfolio_ecl)` | Disbursal-weighted average loss rate per observation window |
+| 6 | `report.py` | `build_excel()` | `ECL_Report.xlsx` |
+| 7 | `validation.py` | `validate() → list[Check]` | `validation_report.xlsx` (independent reconciliation) |
+
+Phase 0 is **not** part of the ECL computation — it generates synthetic data because we have no real bank data. It runs automatically when `ecl.db` is missing and is skipped otherwise.
+
+## ECL_Report.xlsx tabs
+
+| # | Tab | Contents |
+|---|-----|----------|
+| 1 | Summary | Cover metrics + headline weighted loss rate |
+| 2 | DATA_ECL_NEW | The SQL feed (FY_QUARTER × SEGMENT) |
+| 3 | Pivot_90plus | 90+ amount triangle, yellow = chain-ladder projected |
+| 4 | Pivot_TPOS | TPOS amount triangle, yellow = projected |
+| 5 | BadRate_90plus | 90+ / DISB rate triangle (PD curve), yellow = projected |
+| 6 | Movements | TPOS + 90+ movement tables (12…120) |
+| 7 | LossRate_Qtr | Per-quarter loss rate at 84M and 120M (>100% flagged red) |
+| 8 | Weighted_LR | SUMPRODUCT(LR, DISB)/SUM(DISB) per observation window |
 
 ## The calculation
 
@@ -61,42 +94,67 @@ reproducing `=I97/SUM(B51:H51)` (I = 90+ at 84M, B:H = TPOS movement 12→84). A
 weighted_LR = SUMPRODUCT(LR[q1:q2], DISB[q1:q2]) / SUM(DISB[q1:q2])
 ```
 
-reproducing `=SUMPRODUCT(O125:O140,$B125:$B140)/SUM($B125:$B140)`. Weights are disbursal amounts. Only the FY range and anchor change per window. Configured in `final_ecl.py`:
+reproducing `=SUMPRODUCT(O125:O140,$B125:$B140)/SUM($B125:$B140)`. Weights are disbursal amounts. Only the FY range and anchor change per window. Configured in `config.py` (`WINDOWS`, `HEADLINE`):
 
 | Window | Range | Anchor |
 |---|---|---|
-| FY20–FY23 @ 84M | FY20-Q1 → FY23-Q4 | 84M |
 | FY16–FY23 @ 84M | FY16-Q1 → FY23-Q4 | 84M |
 | FY16–FY23 @ 120M | FY16-Q1 → FY23-Q4 | 120M |
 
-**Provisional final step:** `ECL = headline weighted_LR × portfolio current TPOS`, where current TPOS is the latest observed outstanding (triangle diagonal). The weighted rate is per spec; the multiplier is not yet confirmed.
+**Provisional final step:** `ECL = headline weighted_LR × portfolio current TPOS`, where current TPOS is the latest observed outstanding (triangle diagonal). The weighted rate is per spec;
 
 ## Changing the quarter
 
-Edit `config.py`: set `AS_OF` and the `START_DISB`/`END_DISB` window. `AS_OF` drives cohort maturity (which cells are projected) and the current-TPOS diagonal. Windows are set in `final_ecl.py` (`WINDOWS`, `HEADLINE`).
+Edit `config.py`: set `AS_OF` (the single knob). `END_DISB` is derived from `AS_OF` so the two can never silently disagree. `AS_OF` drives cohort maturity (which cells are projected) and the current-TPOS diagonal. Observation windows are also set in `config.py` (`WINDOWS`, `HEADLINE`).
 
-> The phase scripts carry the same values in an inline `CONFIG` block for standalone clarity, so a run works out of the box. Recommended one-step refactor: replace each inline block with `from config import *`.
+## File structure
+
+```
+ECL-AUTOMATION/
+├── main.py              ← one-command orchestrator
+├── config.py            ← single source of truth for all shared knobs
+├── base_loans.py        ← Phase 0: synthetic data generation
+├── sql_refactor.py      ← Phase 1: generated SQL replacing ~82 joins
+├── chain_ladder.py      ← Phase 3: triangle build + chain-ladder fill
+├── loss_rate.py         ← Phase 4: movement tables + loss rates
+├── final_ecl.py         ← Phase 5: weighted-average loss rate
+├── report.py            ← Phase 6: ECL_Report.xlsx (8 tabs)
+├── validation.py        ← Phase 7: independent reconciliation
+├── requirements.txt     ← numpy, pandas, python-dateutil, openpyxl
+└── .gitignore           ← all .csv/.xlsx/ecl.db are regenerated artifacts
+```
+
+Everything under `*.csv`, `*.xlsx`, and `ecl.db` is regenerated by `python main.py` and git-ignored. The `reference from the meeting/` directory (screenshots + legacy scripts) is also git-ignored.
 
 ## Requirements
 
 Python 3.10+ with `pandas`, `numpy`, `openpyxl`, `python-dateutil`. `sqlite3` is built in. No database server needed — the pipeline uses a local `ecl.db` file.
 
+```
+pip install -r requirements.txt
+```
+
 ## Real-data cutover
 
-Today `base_loans.py` generates synthetic data. To run on real bank data, drop that stage and point `sql_refactor.py` at the actual `base_loans` + `performance` tables (Netezza/Teradata). The generated SQL ports with dialect tweaks: `strftime` → the platform's date functions, `1e7` division unchanged. Everything downstream is unchanged.
+Today `base_loans.py` generates synthetic data. To run on real bank data, drop that stage and point `config.DB_PATH` at the actual `base_loans` + `performance` tables (Netezza/Teradata). The generated SQL ports with dialect tweaks: `strftime` → the platform's date functions, `1e7` division unchanged. Everything downstream is unchanged.
 
-## Known issue: the 120M anchor is unreliable
+## Note: 120M anchor behaviour
 
-The Excel chain-ladder formula compounds **down** each MOB column — every projected cell is the row above scaled by a factor > 1, so each projection feeds the next.
+The chain-ladder fill compounds **down** each MOB column — every projected cell is the row above scaled by a disbursal-weighted trend factor. Because the 120M anchor has far fewer mature cohorts than the 84M anchor, its projections span more rows and are inherently noisier. Earlier versions of the pipeline produced implausible 120M rates (>100%) due to unchecked geometric compounding; this has since been fixed and both anchors now produce plausible weighted-average loss rates.
 
-At **84M** this is fine: 17 of the 32 window cohorts are fully mature, projections are short, and the weighted rate lands at a plausible **3.75%** (FY16–FY23) / **5.03%** (FY20–FY23).
-
-At **120M** only **5 of 32** cohorts are mature. The remaining 27 rows compound geometrically — the per-cohort rate climbs 2.4% → 2.95% → 3.71% → 4.84% → 6.13% → 9.01% → … and the weighted average reaches **146.7%**, which is impossible.
-
-Restricted to cohorts genuinely mature at 120M, the rate is **2.41%** — consistent with 84M's mature-only 2.50%.
-
-`validation.py` flags any reported loss rate above 100% as **WARN**. Before using the 120M figure, confirm with the mentor: does the production workbook project deep columns at all, cap them, or restrict the 120M window to mature cohorts only?
+`validation.py` still flags any reported loss rate above 100% as **WARN** as a safety net.
 
 ## Validation philosophy
 
 Never trust automation blind. `validation.py` recomputes every stage independently (not reusing pipeline code) and diffs against the outputs with a crore-level tolerance, plus a plausibility check. Ship only when all checks read PASS.
+
+| # | Check | Method |
+|---|-------|--------|
+| 1 | LAN_CNT | vs pandas groupby on raw DB tables (exact) |
+| 2 | DISBURSAL_AMT | vs pandas groupby |
+| 3 | 90+ sums (all MOB) | vs pandas groupby |
+| 4 | TPOS sums (all MOB) | vs pandas groupby |
+| 5 | loss_rate 84M | vs recompute from triangles |
+| 6 | loss_rate 120M | vs recompute from triangles |
+| 7 | weighted-avg LR | vs explicit SUMPRODUCT/SUM per window |
+| 8 | plausibility | every reported weighted LR in (0,1) — WARN, not FAIL |
