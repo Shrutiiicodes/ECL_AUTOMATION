@@ -1,5 +1,6 @@
 # Virtual environment
 venv/
+.venv/
 
 # Python cache
 __pycache__/
@@ -21,7 +22,10 @@ dist/
 # OS files
 .DS_Store
 Thumbs.db
+
+# ── Regenerated pipeline artifacts (rebuilt by `python main.py`) ──
 ecl.db
 *.csv
 *.xlsx
-__pycache__/
+
+reference from the meeting/
