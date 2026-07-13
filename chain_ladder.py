@@ -23,36 +23,55 @@ Chain-ladder fill (exact reproduction of the Excel formula)
     disbursal-weighted cumulative trend. IFERROR -> 0 when the denominator is 0.
     Cells fill top-to-bottom so each projection can feed the next (as in Excel).
 
-Outputs: tri_90plus_rate.csv, tri_tpos_rate.csv,
-         tri_90plus_amt.csv,  tri_tpos_amt.csv,
-         triangle_90plus_highlighted.xlsx  (projected cells shaded yellow)
+-------------------------------------------------------------------------------
+This module exposes a PURE function:
+
+    run(feed_raw, segment=SEGMENT) -> Triangles(r90, a90, rtp, atp, mat90, mattp, disb, feed)
+
+`feed_raw` is the DATA_ECL_NEW summary (one row per FY_QUARTER x SEGMENT), exactly
+as produced by the SQL phase. run() reads nothing and writes nothing. CSV/Excel
+side effects live only in the `if __name__ == "__main__"` block below.
 """
 
 import calendar
 from datetime import date
+from typing import NamedTuple
 
 import numpy as np
 import pandas as pd
-from openpyxl import Workbook
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-from openpyxl.utils import get_column_letter
 
-# CONFIG - all knobs live in config.py
-from config import *      # FEED_CSV, AS_OF, MOB_LIST, SEGMENT
+from config import *      # AS_OF, MOB_LIST, SEGMENT, and (for __main__) FEED_CSV
 
-# PHASE 2 (folded in): load the summary and slice to a triangle-ready frame
-def load_summary(path=FEED_CSV, segment=None):
-    df = pd.read_csv(path)
+
+class Triangles(NamedTuple):
+    r90: pd.DataFrame    # 90+ rate triangle (filled)
+    a90: pd.DataFrame    # 90+ amount triangle (filled, crores)
+    rtp: pd.DataFrame    # TPOS rate triangle (filled)
+    atp: pd.DataFrame    # TPOS amount triangle (filled, crores)
+    mat90: pd.DataFrame  # maturity mask for the 90+ build (True = observed)
+    mattp: pd.DataFrame  # maturity mask for the TPOS build (identical layout)
+    disb: pd.Series      # disbursal per cohort (the chain-ladder weight)
+    feed: pd.DataFrame    # the collapsed one-row-per-FY_QUARTER summary
+
+
+# --------------------------------------------------------------------------- #
+# PHASE 2 (folded in): collapse the per-segment summary to a triangle-ready frame
+# --------------------------------------------------------------------------- #
+def collapse_summary(df: pd.DataFrame, segment=None) -> pd.DataFrame:
+    """One row per FY_QUARTER (sum amounts + disbursal + count), FY-sorted."""
+    df = df.copy()
     if segment is not None:
         df = df[df.SEGMENT == segment].copy()
-    # collapse segments -> one row per FY_QUARTER (sum amounts + disbursal + count)
     amt_cols = [c for c in df.columns if c.startswith(("AMT_90PLUS", "TPOS_"))]
     agg = {"LAN_CNT": "sum", "DISBURSAL_AMT": "sum", **{c: "sum" for c in amt_cols}}
     g = df.groupby("FY_QUARTER").agg(agg)
     key = lambda q: (int(q[2:4]), int(q[-1]))
     return g.reindex(sorted(g.index, key=key))
 
+
+# --------------------------------------------------------------------------- #
 # MATURITY
+# --------------------------------------------------------------------------- #
 def quarter_end(label):                      # 'FY16-Q1' -> 2015-06-30
     fy = 2000 + int(label[2:4]); q = int(label[-1])
     if   q == 1: y, m = fy - 1, 6
@@ -61,13 +80,17 @@ def quarter_end(label):                      # 'FY16-Q1' -> 2015-06-30
     else:        y, m = fy,     3
     return date(y, m, calendar.monthrange(y, m)[1])
 
+
 def max_mature_mob(label, as_of):
     qe = quarter_end(label)
     months = (as_of.year - qe.year) * 12 + (as_of.month - qe.month)
     valid = [m for m in MOB_LIST if m <= months]
     return max(valid) if valid else -1
 
+
+# --------------------------------------------------------------------------- #
 # CHAIN-LADDER FILL  (exact Excel-formula reproduction, down each column)
+# --------------------------------------------------------------------------- #
 def chain_ladder_fill(rate, disb, mature):
     """rate, mature: DataFrames [quarter x MOB]; disb: Series[quarter]. Returns filled rate."""
     R = rate.to_numpy(dtype=float).copy()
@@ -87,16 +110,16 @@ def chain_ladder_fill(rate, disb, mature):
             R[ri, cj] = prev * num / den if den != 0 else 0.0
     return pd.DataFrame(R, index=rate.index, columns=rate.columns)
 
-# BUILD TRIANGLES
+
+# --------------------------------------------------------------------------- #
+# BUILD ONE METRIC'S TRIANGLE
+# --------------------------------------------------------------------------- #
 def build(metric_prefix, feed):
     cols = [f"{metric_prefix}{m}MOB" for m in MOB_LIST]
     amt  = feed[cols].copy(); amt.columns = MOB_LIST
     disb = feed["DISBURSAL_AMT"]
     rate = amt.div(disb, axis=0)                             # rate = amount / disbursal
-    mature = pd.DataFrame(
-        {m: [MOB_LIST[i] <= max_mature_mob(q, AS_OF) and m <= max_mature_mob(q, AS_OF)
-             for q in feed.index] for i, m in enumerate(MOB_LIST)},
-        index=feed.index)
+    # NOTE: the maturity mask is what matters; this is computed once below.
     mature = pd.DataFrame(
         [[m <= max_mature_mob(q, AS_OF) for m in MOB_LIST] for q in feed.index],
         index=feed.index, columns=MOB_LIST)
@@ -106,15 +129,26 @@ def build(metric_prefix, feed):
     return rate_full, amt_full, mature, disb
 
 
-feed = load_summary(FEED_CSV, SEGMENT)
-r90, a90, mat90, disb = build("AMT_90PLUS_SETTLEMENT_", feed)
-rtp, atp, mattp, _    = build("TPOS_", feed)
+def run(feed_raw: pd.DataFrame, segment=SEGMENT) -> Triangles:
+    """Build the completed 90+ and TPOS triangles from the raw SQL summary. No I/O."""
+    feed = collapse_summary(feed_raw, segment)
+    r90, a90, mat90, disb = build("AMT_90PLUS_SETTLEMENT_", feed)
+    rtp, atp, mattp, _    = build("TPOS_", feed)
+    return Triangles(r90=r90, a90=a90, rtp=rtp, atp=atp,
+                     mat90=mat90, mattp=mattp, disb=disb, feed=feed)
 
-r90.to_csv("tri_90plus_rate.csv"); a90.to_csv("tri_90plus_amt.csv")
-rtp.to_csv("tri_tpos_rate.csv");   atp.to_csv("tri_tpos_amt.csv")
 
-# HIGHLIGHTED XLSX  (visual check: yellow = projected)
-def highlighted_xlsx(rate_full, mature, disb, path, title):
+# =========================================================================== #
+# Standalone entrypoint: disk I/O + the presentation-only highlighted xlsx.
+# None of this runs on import. `python chain_ladder.py` still writes the same
+# four CSVs + the yellow-highlighted workbook. The xlsx writer is a candidate
+# to move into report.py in a later step.
+# =========================================================================== #
+def _highlighted_xlsx(rate_full, mature, disb, path, title):
+    """Visual check: yellow = projected cell. Presentation only."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
     wb = Workbook(); ws = wb.active; ws.title = title
     HF = PatternFill("solid", fgColor="1F4E78"); HFONT = Font(bold=True, color="FFFFFF")
     YEL = PatternFill("solid", fgColor="FFFF00"); C = Alignment("center", "center")
@@ -134,36 +168,47 @@ def highlighted_xlsx(rate_full, mature, disb, path, title):
     ws.freeze_panes = "C2"; ws.column_dimensions["A"].width = 11
     wb.save(path)
 
-highlighted_xlsx(r90, mat90, disb, "triangle_90plus_highlighted.xlsx", "Tri_90plus")
 
-# VALIDATION
-proj = (~mat90).sum().sum()
-tot  = mat90.size
-print("=" * 60)
-print(f"PHASE 3 COMPLETE   (segment = {SEGMENT or 'ALL'})")
-print("=" * 60)
-print(f"triangle shape        : {r90.shape[0]} cohorts x {r90.shape[1]} MOB")
-print(f"cells                 : {tot}  |  observed {tot-proj}  |  projected {proj}")
+def _print_summary(tris: Triangles) -> None:
+    r90, mat90, disb, feed = tris.r90, tris.mat90, tris.disb, tris.feed
+    proj = (~mat90).sum().sum()
+    tot  = mat90.size
+    print("=" * 60)
+    print(f"PHASE 3 COMPLETE   (segment = {SEGMENT or 'ALL'})")
+    print("=" * 60)
+    print(f"triangle shape        : {r90.shape[0]} cohorts x {r90.shape[1]} MOB")
+    print(f"cells                 : {tot}  |  observed {tot-proj}  |  projected {proj}")
 
-print("\nmax mature MOB per cohort (first 3, last 3):")
-labels = list(feed.index)
-for q in labels[:3] + labels[-3:]:
-    print(f"    {q}: {max_mature_mob(q, AS_OF)}")
+    print("\nmax mature MOB per cohort (first 3, last 3):")
+    labels = list(feed.index)
+    for q in labels[:3] + labels[-3:]:
+        print(f"    {q}: {max_mature_mob(q, AS_OF)}")
 
-# worked example: recompute one projected cell by hand and compare to engine
-ri = next(i for i in range(len(labels)) if not mat90.iloc[i].all())   # first immature cohort
-cj = next(j for j in range(len(MOB_LIST)) if not mat90.iloc[ri, j])   # its first immature MOB
-w  = disb.to_numpy()
-num = np.nansum(r90.iloc[:ri, cj].to_numpy() * w[:ri])
-den = np.nansum(r90.iloc[:ri-1, cj].to_numpy() * w[:ri-1])
-hand = r90.iloc[ri-1, cj] * num / den if den else 0.0
-print(f"\nworked example  cell [{labels[ri]}, {MOB_LIST[cj]}MOB]:")
-print(f"    prev(above)={r90.iloc[ri-1,cj]:.6f}  factor={num/den if den else 0:.6f}")
-print(f"    hand={hand:.8f}   engine={r90.iloc[ri,cj]:.8f}   match={np.isclose(hand, r90.iloc[ri,cj])}")
+    # worked example: recompute one projected cell by hand and compare to engine
+    ri = next(i for i in range(len(labels)) if not mat90.iloc[i].all())   # first immature cohort
+    cj = next(j for j in range(len(MOB_LIST)) if not mat90.iloc[ri, j])   # its first immature MOB
+    w  = disb.to_numpy()
+    num = np.nansum(r90.iloc[:ri, cj].to_numpy() * w[:ri])
+    den = np.nansum(r90.iloc[:ri-1, cj].to_numpy() * w[:ri-1])
+    hand = r90.iloc[ri-1, cj] * num / den if den else 0.0
+    print(f"\nworked example  cell [{labels[ri]}, {MOB_LIST[cj]}MOB]:")
+    print(f"    prev(above)={r90.iloc[ri-1,cj]:.6f}  factor={num/den if den else 0:.6f}")
+    print(f"    hand={hand:.8f}   engine={r90.iloc[ri,cj]:.8f}   match={np.isclose(hand, r90.iloc[ri,cj])}")
 
-# sanity: no NaN left, 90+ rate non-decreasing across MOB (cumulative defaults)
-print(f"\nNaN remaining         : {int(r90.isna().sum().sum())}  (should be 0)")
-nondec = (r90.diff(axis=1).fillna(0) >= -1e-9).all().all()
-print(f"90+ rate non-decreasing across MOB : {nondec}")
-print(f"\nWrote: tri_90plus_rate.csv, tri_tpos_rate.csv, tri_90plus_amt.csv,")
-print(f"       tri_tpos_amt.csv, triangle_90plus_highlighted.xlsx")
+    # sanity: no NaN left, 90+ rate non-decreasing across MOB (cumulative defaults)
+    print(f"\nNaN remaining         : {int(r90.isna().sum().sum())}  (should be 0)")
+    nondec = (r90.diff(axis=1).fillna(0) >= -1e-9).all().all()
+    print(f"90+ rate non-decreasing across MOB : {nondec}")
+
+
+if __name__ == "__main__":
+    feed_raw = pd.read_csv(FEED_CSV)
+    tris = run(feed_raw, SEGMENT)
+
+    tris.r90.to_csv("tri_90plus_rate.csv"); tris.a90.to_csv("tri_90plus_amt.csv")
+    tris.rtp.to_csv("tri_tpos_rate.csv");   tris.atp.to_csv("tri_tpos_amt.csv")
+    _highlighted_xlsx(tris.r90, tris.mat90, tris.disb, "triangle_90plus_highlighted.xlsx", "Tri_90plus")
+
+    _print_summary(tris)
+    print(f"\nWrote: tri_90plus_rate.csv, tri_tpos_rate.csv, tri_90plus_amt.csv,")
+    print(f"       tri_tpos_amt.csv, triangle_90plus_highlighted.xlsx")

@@ -24,14 +24,32 @@ keeps the base<->performance join 1:1.
 Parameters (edit CONFIG): disbursal window + MOB grid. as-of maturity is handled
 later in Phase 3, not here.
 
-Outputs: DATA_ECL_NEW.csv, phase1_generated.sql (the query, for review/versioning)
+-------------------------------------------------------------------------------
+This module exposes a PURE function:
+
+    run(db_path, start_disb, end_disb, mob_list) -> SqlOutput(feed, sql)
+
+It connects to the database, runs the generated query, and returns the summary
+DataFrame IN MEMORY (plus the generated SQL text for review). It writes nothing.
+The CSV/.sql side effects and the independent reconciliation live only in the
+`if __name__ == "__main__"` block below.
+
+Real-data cutover: point `db_path` at the bank warehouse and adjust the dialect
+in build_summary_sql / FY_QUARTER_SQL. Nothing downstream changes.
 """
 
 import sqlite3
+from typing import NamedTuple
+
 import pandas as pd
 
-# CONFIG
 from config import *      # DB_PATH, MOB_LIST, START_DISB, END_DISB, OUT_CSV, OUT_SQL
+
+
+class SqlOutput(NamedTuple):
+    feed: pd.DataFrame   # DATA_ECL_NEW: one row per FY_QUARTER x SEGMENT
+    sql: str             # the generated query, for review / versioning
+
 
 # FY-QUARTER EXPRESSION  (Indian FY, matches data_generation.py exactly)
 # Apr-Jun=Q1, Jul-Sep=Q2, Oct-Dec=Q3, Jan-Mar=Q4.  FY label = ending year.
@@ -48,7 +66,10 @@ FY_QUARTER_SQL = """'FY' ||
 # sort key so FY16-Q1 < FY16-Q2 < ... < FY26-Q2
 FY_SORT_SQL = "substr(fy_quarter,3,2), substr(fy_quarter,7,1)"
 
+
+# --------------------------------------------------------------------------- #
 # SQL GENERATOR  (this is what replaces the 82 hand-written joins)
+# --------------------------------------------------------------------------- #
 def build_summary_sql(mob_list):
     ind = "        "
     perf_wide_cols = ",\n".join(
@@ -85,52 +106,71 @@ GROUP BY b.fy_quarter, b.segment
 ORDER BY {FY_SORT_SQL}, b.segment;
 """.strip()
 
-# RUN
-sql = build_summary_sql(MOB_LIST)
-with open(OUT_SQL, "w") as f:
-    f.write(sql)
 
-con = sqlite3.connect(DB_PATH)
-feed = pd.read_sql(sql, con, params=[START_DISB, END_DISB])
-feed.to_csv(OUT_CSV, index=False)
+def run(db_path=DB_PATH, start_disb=START_DISB, end_disb=END_DISB, mob_list=MOB_LIST) -> SqlOutput:
+    """Generate the query, run it against the DB, return the summary feed. No file I/O."""
+    sql = build_summary_sql(mob_list)
+    con = sqlite3.connect(db_path)
+    try:
+        feed = pd.read_sql(sql, con, params=[start_disb, end_disb])
+    finally:
+        con.close()
+    return SqlOutput(feed=feed, sql=sql)
 
-# VALIDATION  -  reconcile SQL output against an independent pandas groupby
-base = pd.read_sql("SELECT * FROM base_loans", con)
-perf = pd.read_sql("SELECT * FROM performance", con)
-con.close()
 
-def fy_q(d):
-    d = pd.Timestamp(d); m = d.month
-    fy = d.year if m in (1, 2, 3) else d.year + 1
-    q = 4 if m in (1, 2, 3) else 1 if m in (4, 5, 6) else 2 if m in (7, 8, 9) else 3
-    return f"FY{str(fy)[-2:]}-Q{q}"
+# =========================================================================== #
+# Standalone entrypoint: write DATA_ECL_NEW.csv + the generated .sql, then run
+# an INDEPENDENT pandas reconciliation. None of this runs on import.
+# =========================================================================== #
+def _reconcile(feed: pd.DataFrame, db_path=DB_PATH) -> None:
+    """Recompute a spot-check via a plain pandas groupby and diff against the SQL feed."""
+    con = sqlite3.connect(db_path)
+    base = pd.read_sql("SELECT * FROM base_loans", con)
+    perf = pd.read_sql("SELECT * FROM performance", con)
+    con.close()
 
-base = base[(base.disbursal_date >= START_DISB) & (base.disbursal_date <= END_DISB)].copy()
-base["fy_quarter"] = base.disbursal_date.map(fy_q)
-bad12 = (perf[perf.mob == 12].groupby("distinct_loan_no").amt_90plus_settlement.sum()
-         .rename("bad12"))                                  # spot-check one MOB
-merged = base.set_index("distinct_loan_no").join(bad12)
-g = merged.groupby(["fy_quarter", "segment"])
-exp_cnt  = g.size()
-exp_disb = g["disbursal_amount"].sum() / 1e7
-exp_bad0 = g["bad12"].sum() / 1e7
+    def fy_q(d):
+        d = pd.Timestamp(d); m = d.month
+        fy = d.year if m in (1, 2, 3) else d.year + 1
+        q = 4 if m in (1, 2, 3) else 1 if m in (4, 5, 6) else 2 if m in (7, 8, 9) else 3
+        return f"FY{str(fy)[-2:]}-Q{q}"
 
-sql_idx = feed.set_index(["FY_QUARTER", "SEGMENT"])
-print("=" * 60)
-print("PHASE 1 COMPLETE  -  reconciliation vs independent pandas")
-print("=" * 60)
-print(f"SQL replaced          : {len(MOB_LIST)*2} joins  ->  1 aggregation CTE")
-print(f"summary rows          : {len(feed)}  (FY_QUARTER x SEGMENT)")
-print(f"columns               : {feed.shape[1]}  (2 keys + LAN_CNT + DISB + {len(MOB_LIST)}x2 MOB)")
-print(f"LAN_CNT total         : {feed.LAN_CNT.sum():,}  (should be <= 60,000)")
-print(f"DISBURSAL_AMT total   : {feed.DISBURSAL_AMT.sum():,.2f} cr")
+    base = base[(base.disbursal_date >= START_DISB) & (base.disbursal_date <= END_DISB)].copy()
+    base["fy_quarter"] = base.disbursal_date.map(fy_q)
+    bad12 = (perf[perf.mob == 12].groupby("distinct_loan_no").amt_90plus_settlement.sum()
+             .rename("bad12"))                                  # spot-check one MOB
+    merged = base.set_index("distinct_loan_no").join(bad12)
+    g = merged.groupby(["fy_quarter", "segment"])
+    exp_cnt  = g.size()
+    exp_disb = g["disbursal_amount"].sum() / 1e7
+    exp_bad0 = g["bad12"].sum() / 1e7
 
-cnt_ok  = (sql_idx.LAN_CNT.reindex(exp_cnt.index) == exp_cnt).all()
-disb_ok = (sql_idx.DISBURSAL_AMT.reindex(exp_disb.index) - exp_disb).abs().max()
-bad_ok  = (sql_idx.AMT_90PLUS_SETTLEMENT_12MOB.reindex(exp_bad0.index).fillna(0) - exp_bad0.fillna(0)).abs().max()
-print(f"LAN_CNT matches       : {cnt_ok}")
-print(f"DISBURSAL max diff    : {disb_ok:.2e} cr")
-print(f"90+ @12MOB max diff   : {bad_ok:.2e} cr")
-print(f"\nWrote: {OUT_CSV}, {OUT_SQL}")
-print("\nfirst rows:")
-print(feed.iloc[:6, :6].to_string(index=False))
+    sql_idx = feed.set_index(["FY_QUARTER", "SEGMENT"])
+    print("=" * 60)
+    print("PHASE 1 COMPLETE  -  reconciliation vs independent pandas")
+    print("=" * 60)
+    print(f"SQL replaced          : {len(MOB_LIST)*2} joins  ->  1 aggregation CTE")
+    print(f"summary rows          : {len(feed)}  (FY_QUARTER x SEGMENT)")
+    print(f"columns               : {feed.shape[1]}  (2 keys + LAN_CNT + DISB + {len(MOB_LIST)}x2 MOB)")
+    print(f"LAN_CNT total         : {feed.LAN_CNT.sum():,}  (should be <= 60,000)")
+    print(f"DISBURSAL_AMT total   : {feed.DISBURSAL_AMT.sum():,.2f} cr")
+
+    cnt_ok  = (sql_idx.LAN_CNT.reindex(exp_cnt.index) == exp_cnt).all()
+    disb_ok = (sql_idx.DISBURSAL_AMT.reindex(exp_disb.index) - exp_disb).abs().max()
+    bad_ok  = (sql_idx.AMT_90PLUS_SETTLEMENT_12MOB.reindex(exp_bad0.index).fillna(0) - exp_bad0.fillna(0)).abs().max()
+    print(f"LAN_CNT matches       : {cnt_ok}")
+    print(f"DISBURSAL max diff    : {disb_ok:.2e} cr")
+    print(f"90+ @12MOB max diff   : {bad_ok:.2e} cr")
+
+
+if __name__ == "__main__":
+    out = run()
+
+    with open(OUT_SQL, "w") as f:
+        f.write(out.sql)
+    out.feed.to_csv(OUT_CSV, index=False)
+
+    _reconcile(out.feed, DB_PATH)
+    print(f"\nWrote: {OUT_CSV}, {OUT_SQL}")
+    print("\nfirst rows:")
+    print(out.feed.iloc[:6, :6].to_string(index=False))
