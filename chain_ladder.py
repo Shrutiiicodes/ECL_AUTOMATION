@@ -1,7 +1,7 @@
 """
 PHASE 3 - TRIANGLE + CHAIN-LADDER ENGINE  (modelling core)
 ==========================================================
-Turns the DATA_ECL_NEW summary into completed run-off triangles for 90+ and
+Turns the data_ecl summary into completed run-off triangles for 90+ and
 TPOS, filling the immature (yellow) cells with the bank's exact Excel formula.
 
 Triangle layout (mirrors the Workings sheet)
@@ -28,7 +28,7 @@ This module exposes a PURE function:
 
     run(feed_raw, segment=SEGMENT) -> Triangles(r90, a90, rtp, atp, mat90, mattp, disb, feed)
 
-`feed_raw` is the DATA_ECL_NEW summary (one row per FY_QUARTER x SEGMENT), exactly
+`feed_raw` is the data_ecl summary (one row per FY_QUARTER x SEGMENT), exactly
 as produced by the SQL phase. run() reads nothing and writes nothing. CSV/Excel
 side effects live only in the `if __name__ == "__main__"` block below.
 """

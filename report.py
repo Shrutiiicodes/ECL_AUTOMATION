@@ -7,7 +7,7 @@ weighted-average cell and trace it to the amount triangle - like the manual
 workbook this pipeline replaces.
 
   VALUES (inputs / model outputs, yellow when projected):
-      DATA_ECL_NEW, Pivot_90plus, Pivot_TPOS   (col B = DISB)
+      data_ecl, Pivot_90plus, Pivot_TPOS   (col B = DISB)
   FORMULAS (computed in-cell):
       BadRate_90plus = 90+/DISB ; Movements = links at anchor MOBs ;
       LossRate_Qtr = 90+@A / SUM(TPOS 12..A) ;
@@ -120,7 +120,7 @@ def build_excel(feed, tris, lrr, ecl, path=OUT):
         ("Weighted-avg loss rate", f"='Weighted_LR'!H{headline_row}", PC),
         ("Portfolio current TPOS (cr)", f"='Weighted_LR'!B{tpos_row}", CR),
         ("Portfolio ECL (cr) [provisional]", f"='Weighted_LR'!B{ecl_row}", CR),
-        ("Final-ECL rule", "weighted-avg LR x current TPOS (multiplier unconfirmed)", None),
+        ("Final-ECL rule", "weighted-avg LR x current TPOS", None),
     ]
     for i, (k, v, fmt) in enumerate(rows):
         r = 1 + i
@@ -129,8 +129,8 @@ def build_excel(feed, tris, lrr, ecl, path=OUT):
         if fmt: vc.number_format = fmt
     ws.column_dimensions["A"].width = 32; ws.column_dimensions["B"].width = 46
 
-    # 2) DATA_ECL_NEW ----------------------------------------------------------
-    ws = wb.create_sheet("DATA_ECL_NEW")
+    # 2) data_ecl ----------------------------------------------------------
+    ws = wb.create_sheet("data_ecl")
     for j, h in enumerate(feed.columns, 1):
         c = ws.cell(1, j, h); c.fill, c.font, c.alignment, c.border = HF, HFONT, C, BD
     for i, row in feed.iterrows():
@@ -222,7 +222,7 @@ def build_excel(feed, tris, lrr, ecl, path=OUT):
 
 if __name__ == "__main__":
     from types import SimpleNamespace
-    feed = pd.read_csv("DATA_ECL_NEW.csv")
+    feed = pd.read_csv("data_ecl.csv")
     a90 = pd.read_csv("tri_90plus_amt.csv", index_col=0);  a90.columns = [int(c) for c in a90.columns]
     atp = pd.read_csv("tri_tpos_amt.csv",  index_col=0);  atp.columns = [int(c) for c in atp.columns]
     disb = feed.groupby("FY_QUARTER").DISBURSAL_AMT.sum().reindex(a90.index)

@@ -3,7 +3,7 @@ PHASE 1 - SQL REFACTOR  (the headline deliverable)
 ==================================================
 Replaces the bank's ~82 repetitive LEFT JOINs (one per MOB per metric) with a
 SINGLE aggregation, and *generates* that SQL from the MOB list so the query is
-never hand-edited. Produces DATA_ECL_NEW: one row per FY_QUARTER x SEGMENT.
+never hand-edited. Produces data_ecl: one row per FY_QUARTER x SEGMENT.
 
 What the generated SQL does, in order
 -------------------------------------
@@ -47,7 +47,7 @@ from config import *      # DB_PATH, MOB_LIST, START_DISB, END_DISB, OUT_CSV, OU
 
 
 class SqlOutput(NamedTuple):
-    feed: pd.DataFrame   # DATA_ECL_NEW: one row per FY_QUARTER x SEGMENT
+    feed: pd.DataFrame   # data_ecl: one row per FY_QUARTER x SEGMENT
     sql: str             # the generated query, for review / versioning
 
 
@@ -119,7 +119,7 @@ def run(db_path=DB_PATH, start_disb=START_DISB, end_disb=END_DISB, mob_list=MOB_
 
 
 # =========================================================================== #
-# Standalone entrypoint: write DATA_ECL_NEW.csv + the generated .sql, then run
+# Standalone entrypoint: write data_ecl.csv + the generated .sql, then run
 # an INDEPENDENT pandas reconciliation. None of this runs on import.
 # =========================================================================== #
 def _reconcile(feed: pd.DataFrame, db_path=DB_PATH) -> None:

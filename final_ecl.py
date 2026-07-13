@@ -16,8 +16,7 @@ Windows requested (only the FY range and the anchor change):
     FY16-Q1 .. FY23-Q4  @ 120M
 
 Provisional final step: ECL = headline weighted_LR x portfolio current TPOS,
-where current TPOS = latest observed outstanding (triangle diagonal). The
-multiplier remains unconfirmed; the weighted rate itself is the mentor's spec.
+where current TPOS = latest observed outstanding (triangle diagonal).
 
 -------------------------------------------------------------------------------
 This module exposes a PURE function:

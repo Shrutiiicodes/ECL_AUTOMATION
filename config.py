@@ -14,7 +14,7 @@ from datetime import date
 # THE ONE KNOB.  Reporting as-of ("today"). Drives triangle maturity, which
 # cells get projected, and the current-TPOS diagonal. Roll this each quarter.
 # --------------------------------------------------------------------------- #
-AS_OF = date(2026, 7, 7)
+AS_OF = date(2026, 6, 30)
 
 # disbursal window (last ~10 years).
 # END_DISB is DERIVED from AS_OF so the two can never silently disagree.
@@ -67,7 +67,7 @@ TOL = 1e-4                      # crore tolerance
 DB_PATH   = "ecl.db"
 BASE_CSV  = "base_loans.csv"
 PERF_CSV  = "performance_long.csv"
-FEED_CSV  = "DATA_ECL_NEW.csv"
+FEED_CSV  = "data_ecl.csv"
 OUT_CSV   = FEED_CSV            # alias used by sql_refactor.py
 OUT_SQL   = "phase1_generated.sql"
 TRI_90    = "tri_90plus_amt.csv"

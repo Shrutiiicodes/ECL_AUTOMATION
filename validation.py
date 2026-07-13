@@ -165,7 +165,7 @@ def print_summary(checks) -> None:
 if __name__ == "__main__":
     from types import SimpleNamespace
 
-    feed = pd.read_csv("DATA_ECL_NEW.csv")
+    feed = pd.read_csv("data_ecl.csv")
     a90 = pd.read_csv("tri_90plus_amt.csv", index_col=0); a90.columns = [int(c) for c in a90.columns]
     atp = pd.read_csv("tri_tpos_amt.csv",  index_col=0); atp.columns = [int(c) for c in atp.columns]
     loss = pd.read_csv("loss_rate.csv")

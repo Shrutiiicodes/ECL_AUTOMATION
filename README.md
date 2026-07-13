@@ -56,7 +56,7 @@ validation.validate(out.feed, tris, lrr, ecl, DB_PATH)
 | Phase | Script | Pure function | Produces |
 |-------|--------|---------------|----------|
 | 0 | `base_loans.py` | *(standalone script)* | `ecl.db` — synthetic `base_loans` + long `performance` tables |
-| 1 | `sql_refactor.py` | `run() → SqlOutput(feed, sql)` | `DATA_ECL_NEW` summary (one row per FY_QUARTER × SEGMENT); generated SQL replaces ~82 joins |
+| 1 | `sql_refactor.py` | `run() → SqlOutput(feed, sql)` | `data_ecl` summary (one row per FY_QUARTER × SEGMENT); generated SQL replaces ~82 joins |
 | 3 | `chain_ladder.py` | `run() → Triangles(r90, a90, rtp, atp, mat90, mattp, disb, feed)` | Completed 90+ / TPOS triangles (Phase 2 folded in) |
 | 4 | `loss_rate.py` | `run() → LossRates(loss, mv90, mvtp)` | Movement tables + per-quarter loss rate at **84M** and **120M** |
 | 5 | `final_ecl.py` | `run() → FinalECL(by_quarter, wavg, portfolio_tpos, portfolio_ecl)` | Disbursal-weighted average loss rate per observation window |
@@ -70,7 +70,7 @@ Phase 0 is **not** part of the ECL computation — it generates synthetic data b
 | # | Tab | Contents |
 |---|-----|----------|
 | 1 | Summary | Cover metrics + headline weighted loss rate |
-| 2 | DATA_ECL_NEW | The SQL feed (FY_QUARTER × SEGMENT) |
+| 2 | data_ecl | The SQL feed (FY_QUARTER × SEGMENT) |
 | 3 | Pivot_90plus | 90+ amount triangle, yellow = chain-ladder projected |
 | 4 | Pivot_TPOS | TPOS amount triangle, yellow = projected |
 | 5 | BadRate_90plus | 90+ / DISB rate triangle (PD curve), yellow = projected |
