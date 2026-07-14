@@ -14,14 +14,16 @@ Maturity (replaces manual yellow-highlighting)
     had j months to develop: months_between(quarter_end, AS_OF) >= j.
     Cells beyond that are immature and get projected.
 
-Chain-ladder fill (exact reproduction of the Excel formula)
-    For an immature cell at (row R, MOB X):
-        value(R,X) = value(R-1,X)
-                     * SUMPRODUCT(X[top..R-1], DISB[top..R-1])
-                     / SUMPRODUCT(X[top..R-2], DISB[top..R-2])
-    i.e. carry the cohort above down the SAME column, scaled by the
-    disbursal-weighted cumulative trend. IFERROR -> 0 when the denominator is 0.
-    Cells fill top-to-bottom so each projection can feed the next (as in Excel).
+Chain-ladder fill (exact reproduction of the Excel formula, on AMOUNT cells)
+    For an immature AMOUNT cell at (row R, MOB X):
+        amt(R,X) = amt(R-1,X)
+                   * SUMPRODUCT(X[top..R-1], DISB[top..R-1])
+                   / SUMPRODUCT(X[top..R-2], DISB[top..R-2])
+    i.e. carry the cohort above down the SAME MOB column, scaled by the
+    disbursal-weighted cumulative ratio. The formula runs on the amount pivot
+    cells (90+ / TPOS in crores), then rate = amount / disbursal is derived.
+    IFERROR -> 0 when the denominator is 0. Cells fill top-to-bottom so each
+    projection feeds the next (as dragging the formula down a column does).
 
 This module exposes a PURE function:
 
@@ -83,42 +85,49 @@ def max_mature_mob(label, as_of):
     return max(valid) if valid else -1
 
 
-# CHAIN-LADDER FILL  (exact Excel-formula reproduction, down each column)
-def chain_ladder_fill(rate, disb, mature):
-    """ALONG-ROW age-to-age fill (standard chain ladder).
-    Immature cell (ri,cj) = value(ri, cj-1) * devfactor(cj-1 -> cj),
-    where the disbursal-weighted age-to-age factor is estimated from the
-    cohorts ABOVE ri. Cells fill left-to-right so projections feed forward."""
-    R = rate.to_numpy(dtype=float).copy()
+# CHAIN-LADDER FILL  (exact reproduction of the bank's Excel formula, down each column)
+def chain_ladder_fill(tri, disb, mature):
+    """DOWN-COLUMN vertical fill — the bank's Excel chain-ladder formula:
+
+        value(ri,cj) = value(ri-1, cj)
+                       * SUMPRODUCT(col_cj[top..ri-1], disb[top..ri-1])
+                       / SUMPRODUCT(col_cj[top..ri-2], disb[top..ri-2])
+
+    i.e. carry the cohort ABOVE down the SAME MOB column, scaled by the
+    disbursal-weighted cumulative ratio. Cells fill top-to-bottom within each
+    column so every projected cell feeds the cumulative sums below it, exactly
+    as dragging  =IFERROR(C45*SUMPRODUCT(C$4:C45,$B$4:B45)
+    /SUMPRODUCT(C$4:C44,$B$4:$B44),0)  down the column does in Excel.
+    The formula runs on the AMOUNT pivot cells (not rates). IFERROR -> 0 when
+    the denominator is 0 or there is no cohort above to anchor on."""
+    R = tri.to_numpy(dtype=float).copy()
     M = mature.to_numpy()
     w = disb.to_numpy(dtype=float)
     n_rows, n_cols = R.shape
-    for ri in range(n_rows):
-        for cj in range(n_cols):
+    for cj in range(n_cols):
+        for ri in range(n_rows):
             if M[ri, cj]:
                 continue
-            if cj == 0:
-                R[ri, cj] = 0.0
+            if ri == 0:
+                R[ri, cj] = 0.0                          # no cohort above
                 continue
-            prev = R[ri, cj - 1]
-            num = np.nansum(R[:ri, cj]     * w[:ri])   # current MOB, cohorts above
-            den = np.nansum(R[:ri, cj - 1] * w[:ri])   # previous MOB, cohorts above
-            R[ri, cj] = prev * num / den if den != 0 else prev
-    return pd.DataFrame(R, index=rate.index, columns=rate.columns)
+            above = R[ri - 1, cj]                        # cell directly above (same MOB)
+            num = np.nansum(R[:ri,     cj] * w[:ri])     # rows top..ri-1 (incl. above)
+            den = np.nansum(R[:ri - 1, cj] * w[:ri - 1]) # rows top..ri-2
+            R[ri, cj] = above * num / den if den != 0 else 0.0
+    return pd.DataFrame(R, index=tri.index, columns=tri.columns)
 
 # BUILD ONE METRIC'S TRIANGLE
 def build(metric_prefix, feed):
     cols = [f"{metric_prefix}{m}MOB" for m in MOB_LIST]
     amt  = feed[cols].copy(); amt.columns = MOB_LIST
     disb = feed["DISBURSAL_AMT"]
-    rate = amt.div(disb, axis=0)                             # rate = amount / disbursal
-    # NOTE: the maturity mask is what matters; this is computed once below.
     mature = pd.DataFrame(
         [[m <= max_mature_mob(q, AS_OF) for m in MOB_LIST] for q in feed.index],
         index=feed.index, columns=MOB_LIST)
-    rate_masked = rate.where(mature)                         # immature -> NaN
-    rate_full   = chain_ladder_fill(rate_masked, disb, mature)
-    amt_full    = rate_full.mul(disb, axis=0)               # back to crores
+    amt_masked = amt.where(mature)                           # immature -> NaN
+    amt_full   = chain_ladder_fill(amt_masked, disb, mature) # formula runs on AMOUNT pivot cells
+    rate_full  = amt_full.div(disb, axis=0)                  # rate = amount / disbursal
     return rate_full, amt_full, mature, disb
 
 
@@ -175,16 +184,17 @@ def _print_summary(tris: Triangles) -> None:
     for q in labels[:3] + labels[-3:]:
         print(f"    {q}: {max_mature_mob(q, AS_OF)}")
 
-    # worked example: recompute one projected cell by hand and compare to engine
+    # worked example: recompute one projected AMOUNT cell by hand and compare to engine
+    a90 = tris.a90                                                        # amounts (what the formula runs on)
     ri = next(i for i in range(len(labels)) if not mat90.iloc[i].all())   # first immature cohort
     cj = next(j for j in range(len(MOB_LIST)) if not mat90.iloc[ri, j])   # its first immature MOB
     w  = disb.to_numpy()
-    num = np.nansum(r90.iloc[:ri, cj].to_numpy() * w[:ri])
-    den = np.nansum(r90.iloc[:ri-1, cj].to_numpy() * w[:ri-1])
-    hand = r90.iloc[ri-1, cj] * num / den if den else 0.0
-    print(f"\nworked example  cell [{labels[ri]}, {MOB_LIST[cj]}MOB]:")
-    print(f"    prev(above)={r90.iloc[ri-1,cj]:.6f}  factor={num/den if den else 0:.6f}")
-    print(f"    hand={hand:.8f}   engine={r90.iloc[ri,cj]:.8f}   match={np.isclose(hand, r90.iloc[ri,cj])}")
+    num = np.nansum(a90.iloc[:ri,   cj].to_numpy() * w[:ri])
+    den = np.nansum(a90.iloc[:ri-1, cj].to_numpy() * w[:ri-1])
+    hand = a90.iloc[ri-1, cj] * num / den if den else 0.0
+    print(f"\nworked example (amount)  cell [{labels[ri]}, {MOB_LIST[cj]}MOB]:")
+    print(f"    above={a90.iloc[ri-1,cj]:.6f}  factor={num/den if den else 0:.6f}")
+    print(f"    hand={hand:.8f}   engine={a90.iloc[ri,cj]:.8f}   match={np.isclose(hand, a90.iloc[ri,cj])}")
 
     # sanity: no NaN left, 90+ rate non-decreasing across MOB (cumulative defaults)
     print(f"\nNaN remaining         : {int(r90.isna().sum().sum())}  (should be 0)")
