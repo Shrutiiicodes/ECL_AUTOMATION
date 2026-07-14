@@ -118,24 +118,29 @@ def chain_ladder_fill(tri, disb, mature):
     return pd.DataFrame(R, index=tri.index, columns=tri.columns)
 
 # BUILD ONE METRIC'S TRIANGLE
-def build(metric_prefix, feed):
+def build(metric_prefix, feed, fill_on="amount"):
     cols = [f"{metric_prefix}{m}MOB" for m in MOB_LIST]
     amt  = feed[cols].copy(); amt.columns = MOB_LIST
     disb = feed["DISBURSAL_AMT"]
     mature = pd.DataFrame(
         [[m <= max_mature_mob(q, AS_OF) for m in MOB_LIST] for q in feed.index],
         index=feed.index, columns=MOB_LIST)
-    amt_masked = amt.where(mature)                           # immature -> NaN
-    amt_full   = chain_ladder_fill(amt_masked, disb, mature) # formula runs on AMOUNT pivot cells
-    rate_full  = amt_full.div(disb, axis=0)                  # rate = amount / disbursal
+    if fill_on == "rate":
+        rate_masked = amt.div(disb, axis=0).where(mature)    # RATE (%) cells, immature -> NaN
+        rate_full   = chain_ladder_fill(rate_masked, disb, mature)  # formula runs on % cells (matches Excel)
+        amt_full    = rate_full.mul(disb, axis=0)            # amount = rate * disbursal
+    else:
+        amt_masked = amt.where(mature)                       # immature -> NaN
+        amt_full   = chain_ladder_fill(amt_masked, disb, mature)    # formula runs on AMOUNT cells
+        rate_full  = amt_full.div(disb, axis=0)              # rate = amount / disbursal
     return rate_full, amt_full, mature, disb
 
 
 def run(feed_raw: pd.DataFrame, segment=SEGMENT) -> Triangles:
     """Build the completed 90+ and TPOS triangles from the raw SQL summary. No I/O."""
     feed = collapse_summary(feed_raw, segment)
-    r90, a90, mat90, disb = build("AMT_90PLUS_SETTLEMENT_", feed)
-    rtp, atp, mattp, _    = build("TPOS_", feed)
+    r90, a90, mat90, disb = build("AMT_90PLUS_SETTLEMENT_", feed, fill_on="rate")
+    rtp, atp, mattp, _    = build("TPOS_", feed, fill_on="amount")
     return Triangles(r90=r90, a90=a90, rtp=rtp, atp=atp,
                      mat90=mat90, mattp=mattp, disb=disb, feed=feed)
 

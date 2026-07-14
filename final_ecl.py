@@ -15,8 +15,10 @@ Windows requested (only the FY range and the anchor change):
     FY16-Q1 .. FY23-Q4  @  84M
     FY16-Q1 .. FY23-Q4  @ 120M
 
-Provisional final step: ECL = headline weighted_LR x portfolio current TPOS,
-where current TPOS = latest observed outstanding (triangle diagonal).
+Final step (mentor-confirmed): ECL = headline weighted_LR x window disbursal,
+i.e. the total disbursal amount of the quarters INSIDE the headline window.
+CURRENT_TPOS (latest observed outstanding, the triangle diagonal) is still
+computed and shown for information only - it is NOT the exposure.
 
 -------------------------------------------------------------------------------
 This module exposes a PURE function:
@@ -41,8 +43,8 @@ from config import *      # AS_OF, MOB_LIST, WINDOWS, HEADLINE, fy_key
 class FinalECL(NamedTuple):
     by_quarter: pd.DataFrame  # loss table + CURRENT_MOB + CURRENT_TPOS (was ecl_by_quarter.csv)
     wavg: pd.DataFrame        # one row per observation window (was weighted_loss_rate.csv)
-    portfolio_tpos: float     # sum of the current-TPOS diagonal (crores)
-    portfolio_ecl: float      # headline weighted_LR x portfolio_tpos (provisional)
+    portfolio_tpos: float     # sum of current-TPOS diagonal (crores) - INFO ONLY, not the exposure
+    portfolio_ecl: float      # headline weighted_LR x headline window disbursal (the ECL)
 
 # current exposure = diagonal of TPOS triangle
 def quarter_end(label):
@@ -166,8 +168,9 @@ def _print_summary(res: FinalECL) -> None:
     print(f"\nhand-check {HEADLINE} ({len(win)} qtrs, {q1}..{q2}):")
     print(f"    SUMPRODUCT = {sp:.6f}   SUM(disb) = {sw:.6f}   -> {sp/sw:.6%}")
     print(f"    engine     = {headline.WEIGHTED_AVG_LR:.6%}   match = {np.isclose(sp/sw, headline.WEIGHTED_AVG_LR)}")
-    print(f"\nPortfolio ECL (provisional, {HEADLINE}) = {portfolio_ecl:,.2f} cr"
-          f"   coverage {portfolio_ecl/portfolio_tpos:.4%}")
+    print(f"\nECL ({HEADLINE}) = weighted_LR x window disbursal = {portfolio_ecl:,.2f} cr"
+          f"   (= {headline.WEIGHTED_AVG_LR:.4%} of {headline.TOTAL_DISB:,.2f} cr disbursal)")
+    print(f"    [info only] portfolio current TPOS = {portfolio_tpos:,.2f} cr")
 
 
 if __name__ == "__main__":
