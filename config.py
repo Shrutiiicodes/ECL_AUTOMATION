@@ -10,10 +10,8 @@ presentation, not configuration.
 """
 from datetime import date
 
-# --------------------------------------------------------------------------- #
 # THE ONE KNOB.  Reporting as-of ("today"). Drives triangle maturity, which
 # cells get projected, and the current-TPOS diagonal. Roll this each quarter.
-# --------------------------------------------------------------------------- #
 AS_OF = date(2026, 6, 30)
 
 # disbursal window (last ~10 years).
@@ -43,9 +41,7 @@ HEADLINE = "FY20-FY23 @ 84M"    # window used for the provisional ECL number
 # None = whole book (all segments); or 1..5 for a single segment
 SEGMENT = None
 
-# --------------------------------------------------------------------------- #
 # synthetic data generation (base_loans.py only)
-# --------------------------------------------------------------------------- #
 SEED     = 34
 N_LOANS  = 60_000
 SEGMENTS = [1, 2, 3, 4, 5]
@@ -56,14 +52,10 @@ SEG_DEFAULT_RATE = {1: 0.020, 2: 0.035, 3: 0.055, 4: 0.080, 5: 0.120}
 # the original wide CSV. Keep False unless the mentor asks otherwise.
 FREEZE_TPOS_AT_DEFAULT = False
 
-# --------------------------------------------------------------------------- #
 # validation
-# --------------------------------------------------------------------------- #
 TOL = 1e-4                      # crore tolerance
 
-# --------------------------------------------------------------------------- #
 # file names
-# --------------------------------------------------------------------------- #
 DB_PATH   = "ecl.db"
 BASE_CSV  = "base_loans.csv"
 PERF_CSV  = "performance_long.csv"
@@ -83,7 +75,5 @@ REPORT_XLSX     = "ECL_Report.xlsx"
 VALIDATION_XLSX = "validation_report.xlsx"
 OUT       = REPORT_XLSX         # alias used by report.py
 
-# --------------------------------------------------------------------------- #
 # shared helper: FY-quarter sort key   'FY16-Q1' -> (16, 1)
-# --------------------------------------------------------------------------- #
 fy_key = lambda q: (int(q[2:4]), int(q[-1]))

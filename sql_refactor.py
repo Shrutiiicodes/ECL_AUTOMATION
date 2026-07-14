@@ -67,9 +67,7 @@ FY_QUARTER_SQL = """'FY' ||
 FY_SORT_SQL = "substr(fy_quarter,3,2), substr(fy_quarter,7,1)"
 
 
-# --------------------------------------------------------------------------- #
 # SQL GENERATOR  (this is what replaces the 82 hand-written joins)
-# --------------------------------------------------------------------------- #
 def build_summary_sql(mob_list):
     ind = "        "
     perf_wide_cols = ",\n".join(
@@ -118,10 +116,8 @@ def run(db_path=DB_PATH, start_disb=START_DISB, end_disb=END_DISB, mob_list=MOB_
     return SqlOutput(feed=feed, sql=sql)
 
 
-# =========================================================================== #
 # Standalone entrypoint: write data_ecl.csv + the generated .sql, then run
 # an INDEPENDENT pandas reconciliation. None of this runs on import.
-# =========================================================================== #
 def _reconcile(feed: pd.DataFrame, db_path=DB_PATH) -> None:
     """Recompute a spot-check via a plain pandas groupby and diff against the SQL feed."""
     con = sqlite3.connect(db_path)

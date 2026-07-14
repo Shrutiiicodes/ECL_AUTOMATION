@@ -44,10 +44,7 @@ class FinalECL(NamedTuple):
     portfolio_tpos: float     # sum of the current-TPOS diagonal (crores)
     portfolio_ecl: float      # headline weighted_LR x portfolio_tpos (provisional)
 
-
-# --------------------------------------------------------------------------- #
 # current exposure = diagonal of TPOS triangle
-# --------------------------------------------------------------------------- #
 def quarter_end(label):
     fy = 2000 + int(label[2:4]); q = int(label[-1])
     y, m = {1: (fy - 1, 6), 2: (fy - 1, 9), 3: (fy - 1, 12), 4: (fy, 3)}[q]
@@ -70,9 +67,7 @@ def run(loss: pd.DataFrame, atp: pd.DataFrame) -> FinalECL:
     loss["CURRENT_TPOS"] = [atp.loc[q, current_mob(q)] for q in loss.FY_QUARTER]
     portfolio_tpos = loss.CURRENT_TPOS.sum()
 
-    # ----------------------------------------------------------------------- #
     # WEIGHTED AVERAGE LOSS RATE PER WINDOW
-    # ----------------------------------------------------------------------- #
     rows = []
     for label, q1, q2, A in WINDOWS:
         k1, k2 = fy_key(q1), fy_key(q2)
@@ -92,11 +87,9 @@ def run(loss: pd.DataFrame, atp: pd.DataFrame) -> FinalECL:
                     portfolio_tpos=portfolio_tpos, portfolio_ecl=portfolio_ecl)
 
 
-# =========================================================================== #
 # Standalone entrypoint: disk I/O + presentation-only Excel.
 # None of this runs on import. `python final_ecl.py` writes the same outputs.
 # The Excel writer is a candidate to move into report.py in a later step.
-# =========================================================================== #
 def _to_excel(res: FinalECL, path: str) -> None:
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side

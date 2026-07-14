@@ -23,7 +23,6 @@ Chain-ladder fill (exact reproduction of the Excel formula)
     disbursal-weighted cumulative trend. IFERROR -> 0 when the denominator is 0.
     Cells fill top-to-bottom so each projection can feed the next (as in Excel).
 
--------------------------------------------------------------------------------
 This module exposes a PURE function:
 
     run(feed_raw, segment=SEGMENT) -> Triangles(r90, a90, rtp, atp, mat90, mattp, disb, feed)
@@ -54,9 +53,7 @@ class Triangles(NamedTuple):
     feed: pd.DataFrame    # the collapsed one-row-per-FY_QUARTER summary
 
 
-# --------------------------------------------------------------------------- #
 # collapse the per-segment summary to a triangle-ready frame
-# --------------------------------------------------------------------------- #
 def collapse_summary(df: pd.DataFrame, segment=None) -> pd.DataFrame:
     """One row per FY_QUARTER (sum amounts + disbursal + count), FY-sorted."""
     df = df.copy()
@@ -69,9 +66,7 @@ def collapse_summary(df: pd.DataFrame, segment=None) -> pd.DataFrame:
     return g.reindex(sorted(g.index, key=key))
 
 
-# --------------------------------------------------------------------------- #
 # MATURITY
-# --------------------------------------------------------------------------- #
 def quarter_end(label):                      # 'FY16-Q1' -> 2015-06-30
     fy = 2000 + int(label[2:4]); q = int(label[-1])
     if   q == 1: y, m = fy - 1, 6
@@ -88,9 +83,7 @@ def max_mature_mob(label, as_of):
     return max(valid) if valid else -1
 
 
-# --------------------------------------------------------------------------- #
 # CHAIN-LADDER FILL  (exact Excel-formula reproduction, down each column)
-# --------------------------------------------------------------------------- #
 def chain_ladder_fill(rate, disb, mature):
     """ALONG-ROW age-to-age fill (standard chain ladder).
     Immature cell (ri,cj) = value(ri, cj-1) * devfactor(cj-1 -> cj),
@@ -113,10 +106,7 @@ def chain_ladder_fill(rate, disb, mature):
             R[ri, cj] = prev * num / den if den != 0 else prev
     return pd.DataFrame(R, index=rate.index, columns=rate.columns)
 
-
-# --------------------------------------------------------------------------- #
 # BUILD ONE METRIC'S TRIANGLE
-# --------------------------------------------------------------------------- #
 def build(metric_prefix, feed):
     cols = [f"{metric_prefix}{m}MOB" for m in MOB_LIST]
     amt  = feed[cols].copy(); amt.columns = MOB_LIST
@@ -141,12 +131,10 @@ def run(feed_raw: pd.DataFrame, segment=SEGMENT) -> Triangles:
                      mat90=mat90, mattp=mattp, disb=disb, feed=feed)
 
 
-# =========================================================================== #
 # Standalone entrypoint: disk I/O + the presentation-only highlighted xlsx.
 # None of this runs on import. `python chain_ladder.py` still writes the same
 # four CSVs + the yellow-highlighted workbook. The xlsx writer is a candidate
 # to move into report.py in a later step.
-# =========================================================================== #
 def _highlighted_xlsx(rate_full, mature, disb, path, title):
     """Visual check: yellow = projected cell. Presentation only."""
     from openpyxl import Workbook

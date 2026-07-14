@@ -107,7 +107,7 @@ def build_excel(feed, tris, lrr, ecl, path=OUT):
     wb = Workbook()
     wb.calculation.fullCalcOnLoad = True
 
-    # 1) Summary ---------------------------------------------------------------
+    # 1) Summary
     ws = wb.active; ws.title = "Summary"
     headline_row = 2 + int(list(wavg.index[wavg.WINDOW == HEADLINE])[0])
     tpos_row, ecl_row = 3 + len(wavg), 4 + len(wavg)
@@ -129,7 +129,7 @@ def build_excel(feed, tris, lrr, ecl, path=OUT):
         if fmt: vc.number_format = fmt
     ws.column_dimensions["A"].width = 32; ws.column_dimensions["B"].width = 46
 
-    # 2) data_ecl ----------------------------------------------------------
+    # 2) data_ecl
     ws = wb.create_sheet("data_ecl")
     for j, h in enumerate(feed.columns, 1):
         c = ws.cell(1, j, h); c.fill, c.font, c.alignment, c.border = HF, HFONT, C, BD
@@ -141,14 +141,14 @@ def build_excel(feed, tris, lrr, ecl, path=OUT):
             elif col not in ("FY_QUARTER", "SEGMENT"): c.number_format = CR
     ws.freeze_panes = "C2"; ws.column_dimensions["A"].width = 12
 
-    # 3-4) amount triangles (values) ------------------------------------------
+    # 3-4) amount triangles (values)
     write_amount_triangle(wb.create_sheet("Pivot_90plus"), a90, disb)
     write_amount_triangle(wb.create_sheet("Pivot_TPOS"),   atp, disb)
 
-    # 5) BadRate_90plus (PD formulas) -----------------------------------------
+    # 5) BadRate_90plus (PD formulas)
     write_badrate_triangle(wb.create_sheet("BadRate_90plus"), cohorts, "Pivot_90plus", "PD_")
 
-    # 6) Movements (formula links) --------------------------------------------
+    # 6) Movements (formula links)
     ws = wb.create_sheet("Movements")
     def mv_block(r0, prefix, src_sheet):
         for j, h in enumerate(["FY_QUARTER"] + [f"{prefix}{m}MOB" for m in ANCHORS], 1):
@@ -164,7 +164,7 @@ def build_excel(feed, tris, lrr, ecl, path=OUT):
     mv_block(end + 2, "90PLUS_", "Pivot_90plus")
     ws.column_dimensions["A"].width = 12
 
-    # 7) LossRate_Qtr (formulas) ----------------------------------------------
+    # 7) LossRate_Qtr (formulas)
     ws = wb.create_sheet("LossRate_Qtr")
     for j, h in enumerate(["FY_QUARTER", "DISB_AMT (weight)", "LOSS_RATE_84M", "LOSS_RATE_120M",
                            "CURRENT_MOB", "CURRENT_TPOS"], 1):
@@ -186,7 +186,7 @@ def build_excel(feed, tris, lrr, ecl, path=OUT):
     ws.column_dimensions["A"].width = 12
     for col in "BCDEF": ws.column_dimensions[col].width = 16
 
-    # 8) Weighted_LR (formulas) -----------------------------------------------
+    # 8) Weighted_LR (formulas)
     ws = wb.create_sheet("Weighted_LR")
     heads = ["WINDOW", "FY_START", "FY_END", "ANCHOR", "N_QTRS", "TOTAL_DISB", "SIMPLE_AVG", "WEIGHTED_AVG"]
     for j, h in enumerate(heads, 1):

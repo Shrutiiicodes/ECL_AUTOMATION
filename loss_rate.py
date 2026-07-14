@@ -55,9 +55,7 @@ def run(tri_90_amt: pd.DataFrame, tri_tpos_amt: pd.DataFrame, feed: pd.DataFrame
     mv90 = a90[ALL_ANCHORS].copy()
     mvtp = atp[ALL_ANCHORS].copy()
 
-    # ------------------------------------------------------------------------- #
     # LOSS RATE PER ANCHOR   (IFERROR -> 0)
-    # ------------------------------------------------------------------------- #
     loss = pd.DataFrame({"FY_QUARTER": a90.index, "DISBURSAL_AMT": disb.values})
     for A in ANCHOR_MOBS:
         ancs = anchors_for(A)
@@ -72,11 +70,10 @@ def run(tri_90_amt: pd.DataFrame, tri_tpos_amt: pd.DataFrame, feed: pd.DataFrame
     return LossRates(loss=loss, mv90=mv90, mvtp=mvtp)
 
 
-# =========================================================================== #
 # Standalone entrypoint: disk I/O + the presentation-only Excel writer.
 # None of this runs on import. It exists so `python loss_rate.py` still works.
 # The Excel writer is a candidate to move into report.py in the next step.
-# =========================================================================== #
+
 def _to_excel(res: LossRates, path: str) -> None:
     """Mirror Final_Workings: TPOS movement, 90+ movement, loss rates. Presentation only."""
     from openpyxl import Workbook

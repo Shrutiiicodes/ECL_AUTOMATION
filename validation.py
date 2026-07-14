@@ -54,7 +54,7 @@ def fy_q(d):
 
 def validate(feed, tris, lrr, ecl, db_path=DB_PATH) -> list:
     """Recompute independently from the DB and reconcile against the pipeline results."""
-    # --- independent recompute of the SQL summary (checks 1-4) ---------------- #
+    # independent recompute of the SQL summary (checks 1-4)
     con = sqlite3.connect(db_path)
     base = pd.read_sql("SELECT * FROM base_loans", con)
     perf = pd.read_sql("SELECT * FROM performance", con)
@@ -88,7 +88,7 @@ def validate(feed, tris, lrr, ecl, db_path=DB_PATH) -> list:
     add("90+ sums (all MOB)",  float((feed_idx[bc].fillna(0) - exp[bc].fillna(0)).abs().values.max()))
     add("TPOS sums (all MOB)", float((feed_idx[tc].fillna(0) - exp[tc].fillna(0)).abs().values.max()))
 
-    # --- loss rates (checks 5-6): recompute from the triangles ---------------- #
+    # loss rates (checks 5-6): recompute from the triangles
     a90 = tris.a90.copy(); a90.columns = [int(c) for c in a90.columns]
     atp = tris.atp.copy(); atp.columns = [int(c) for c in atp.columns]
     loss = lrr.loss.set_index("FY_QUARTER")
@@ -97,7 +97,7 @@ def validate(feed, tris, lrr, ecl, db_path=DB_PATH) -> list:
         lr = (a90[A] / den).replace([np.inf, -np.inf], 0).fillna(0)
         add(f"loss_rate {A}M", float((loss[f"LOSS_RATE_{A}M"] - lr.reindex(loss.index)).abs().max()))
 
-    # --- weighted averages (check 7) ------------------------------------------ #
+    # weighted averages (check 7)
     wavg = ecl.wavg
     lr_all = lrr.loss
     worst = 0.0
@@ -121,9 +121,7 @@ def overall_status(checks) -> str:
     return "PASS"
 
 
-# =========================================================================== #
 # Presentation + standalone entrypoint. None of this runs on import.
-# =========================================================================== #
 def write_report(checks, path: str) -> None:
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
