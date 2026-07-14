@@ -77,11 +77,11 @@ def run(loss: pd.DataFrame, atp: pd.DataFrame) -> FinalECL:
         rows.append({"WINDOW": label, "FY_START": q1, "FY_END": q2, "ANCHOR_MOB": A,
                      "N_QUARTERS": len(win), "TOTAL_DISB": w.sum(),
                      "SIMPLE_AVG_LR": float(lr.mean()), "WEIGHTED_AVG_LR": wavg,
-                     "ECL_IF_APPLIED": wavg * portfolio_tpos})
+                     "ECL_IF_APPLIED": wavg * w.sum()})
     wavg_df = pd.DataFrame(rows)
 
     headline = wavg_df[wavg_df.WINDOW == HEADLINE].iloc[0]
-    portfolio_ecl = headline.WEIGHTED_AVG_LR * portfolio_tpos
+    portfolio_ecl = headline.WEIGHTED_AVG_LR * headline.TOTAL_DISB
 
     return FinalECL(by_quarter=loss, wavg=wavg_df,
                     portfolio_tpos=portfolio_tpos, portfolio_ecl=portfolio_ecl)
@@ -151,7 +151,8 @@ def _print_summary(res: FinalECL) -> None:
     headline = wavg_df[wavg_df.WINDOW == HEADLINE].iloc[0]
 
     print("=" * 68); print("FINAL ECL  -  weighted-average loss rate"); print("=" * 68)
-    print(f"portfolio current TPOS : {portfolio_tpos:,.2f} cr\n")
+    print(f"portfolio current TPOS : {portfolio_tpos:,.2f} cr")
+    print(f"headline window disb  : {headline.TOTAL_DISB:,.2f} cr\n")
     print(f"{'WINDOW':<20}{'QTRS':>6}{'SIMPLE':>12}{'WEIGHTED':>14}   flag")
     for _, r in wavg_df.iterrows():
         flag = "  <-- IMPLAUSIBLE (>100%)" if r.WEIGHTED_AVG_LR > 1 else ""

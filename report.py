@@ -118,9 +118,9 @@ def build_excel(feed, tris, lrr, ecl, path=OUT):
         ("Loss-rate anchors", "84M and 120M", None),
         ("Headline window", HEADLINE, None),
         ("Weighted-avg loss rate", f"='Weighted_LR'!H{headline_row}", PC),
-        ("Portfolio current TPOS (cr)", f"='Weighted_LR'!B{tpos_row}", CR),
-        ("Portfolio ECL (cr) [provisional]", f"='Weighted_LR'!B{ecl_row}", CR),
-        ("Final-ECL rule", "weighted-avg LR x current TPOS", None),
+        ("Window total disbursal (cr)", f"='Weighted_LR'!B{tpos_row}", CR),
+        ("ECL (cr)", f"='Weighted_LR'!B{ecl_row}", CR),
+        ("Final-ECL rule", "weighted-avg LR x observation-window disbursal", None),
     ]
     for i, (k, v, fmt) in enumerate(rows):
         r = 1 + i
@@ -209,10 +209,10 @@ def build_excel(feed, tris, lrr, ecl, path=OUT):
         if r.WEIGHTED_AVG_LR > 1: wc.fill = WARN
         for cc in range(1, 9): ws.cell(rr, cc).alignment = C; ws.cell(rr, cc).border = BD
     r0 = 3 + len(wavg)
-    ws.cell(r0, 1, "Portfolio current TPOS (cr)").font = Font(bold=True)
-    ws.cell(r0, 2, f"=SUM(LossRate_Qtr!F2:F{last_lr_row})").number_format = CR
-    ws.cell(r0 + 1, 1, "Portfolio ECL (cr) [provisional]").font = Font(bold=True)
-    ec = ws.cell(r0 + 1, 2, f"=H{headline_row}*B{r0}"); ec.number_format = CR; ec.fill = TOT
+    ws.cell(r0, 1, "Headline window total disbursal (cr)").font = Font(bold=True)
+    ws.cell(r0, 2, f"=F{headline_row}").number_format = CR
+    ws.cell(r0 + 1, 1, "ECL (cr) = weighted LR x window disbursal").font = Font(bold=True)
+    ec = ws.cell(r0 + 1, 2, f"=H{headline_row}*F{headline_row}"); ec.number_format = CR; ec.fill = TOT
     for col, w in zip("ABCDEFGH", [20, 10, 10, 9, 9, 14, 13, 14]):
         ws.column_dimensions[col].width = w
 
