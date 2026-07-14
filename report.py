@@ -1,21 +1,26 @@
 """
-EXCEL REPORT GENERATION  (live-formula edition)
-===============================================
-Source sheets carry VALUES; every COMPUTED sheet carries live Excel FORMULAS
-referencing the source cells, so a reviewer can click any PD / loss-rate /
-weighted-average cell and trace it to the amount triangle - like the manual
-workbook this pipeline replaces.
+EXCEL REPORT GENERATION  (live-formula edition, mentor 4+3 tab layout)
+=====================================================================
+Sheet map (mirrors the manual workbook):
 
-  VALUES (inputs / model outputs, yellow when projected):
-      data_ecl, Pivot_90plus, Pivot_TPOS   (col B = DISB)
-  FORMULAS (computed in-cell):
-      BadRate_90plus = 90+/DISB ; Movements = links at anchor MOBs ;
-      LossRate_Qtr = 90+@A / SUM(TPOS 12..A) ;
-      Weighted_LR = SUMPRODUCT(LR,DISB)/SUM(DISB) ; Summary links to Weighted_LR
+  Summary        headline as-of / ECL (links to Weighted_LR)
+  DATA_ECL_NEW   raw per-segment feed (values)
+  Pivot_ECL      RAW pivot: 90+ amount block + TPOS amount block, each with a
+                 Grand Total. Observed cells only; immature cells are BLANK.
+                 NO yellow - this is actuals, not projections.
+  Workings       CHAIN-LADDER triangles with LIVE Excel formulas:
+                   90+  as %      (rate = 90+/DISB)
+                   TPOS as amount (crores)
+                 Mature cells link to Pivot_ECL; immature (yellow) cells carry
+                 the bank's =IFERROR(above*SUMPRODUCT(col,DISB)/SUMPRODUCT(col,DISB),0)
+                 chain-ladder formula, exactly as in the manual sheet.
+  Final_Workings movement tables (read from Workings):
+                   TPOS movement amount, TPOS movement %, 90+ movement %
+  LossRate       per-quarter loss rate  = 90+@A / SUM(TPOS 12..A)   (from Workings)
+  Weighted_LR    disbursal-weighted average loss rate per window + final ECL
 
-Python still computes everything (validation.py reconciles independently); the
-formulas recompute to the identical number. fullCalcOnLoad makes the workbook
-show results the moment it opens.
+Every computed cell is a live formula; validation.py reconciles independently.
+fullCalcOnLoad makes the workbook show results the moment it opens.
 
     build_excel(feed, tris, lrr, ecl, path=OUT) -> Workbook
 """
@@ -34,14 +39,18 @@ HF   = PatternFill("solid", fgColor="1F4E78"); HFONT = Font(bold=True, color="FF
 IFL  = PatternFill("solid", fgColor="DDEBF7"); IFONT = Font(bold=True, size=10)
 YEL  = PatternFill("solid", fgColor="FFFF00"); WARN = PatternFill("solid", fgColor="FFC7CE")
 TOT  = PatternFill("solid", fgColor="C6E0B4")
+TITF = Font(bold=True, size=11, color="1F4E78")
 CF = Font(size=10); C = Alignment("center", "center"); L = Alignment("left", "center")
 BD = Border(*[Side(style="thin", color="D9D9D9")] * 4)
 CR, PC, IN = "#,##0.0000", "0.00%", "#,##0"
 
-MOB_COL0 = 3                                        # column index of MOB_LIST[0] (A=FY, B=DISB, C=MOB0)
+MOB_COL0 = 3                                        # column of MOB_LIST[0] (A=FY, B=DISB, C=MOB0)
 def mob_col(j):        return MOB_COL0 + j
 def mob_letter(j):     return get_column_letter(mob_col(j))
 def anchor_letter(a):  return mob_letter(MOB_LIST.index(a))
+
+PIVOT = "Pivot_ECL"
+WORK  = "Workings"
 
 
 def quarter_end(label):
@@ -60,39 +69,74 @@ def max_mature_mob(label):
 is_mature = lambda q, mob: mob <= max_mature_mob(q)
 
 
-def _triangle_header(ws, prefix):
+def _hdr_row(ws, r0, prefix):
     for j, h in enumerate(["FY_QUARTER", "DISB_AMT"] + [f"{prefix}{m}MOB" for m in MOB_LIST], 1):
-        c = ws.cell(1, j, h); c.fill, c.font, c.alignment, c.border = HF, HFONT, C, BD
+        c = ws.cell(r0, j, h); c.fill, c.font, c.alignment, c.border = HF, HFONT, C, BD
+
+
+def _widths(ws):
     ws.column_dimensions["A"].width = 12; ws.column_dimensions["B"].width = 12
     for j in range(MOB_COL0, MOB_COL0 + len(MOB_LIST)):
         ws.column_dimensions[get_column_letter(j)].width = 11
-    ws.freeze_panes = ws.cell(2, MOB_COL0)
 
 
-def write_amount_triangle(ws, amt, disb, prefix=""):
-    """Source amount triangle: DISB + amounts as VALUES, yellow = projected."""
-    _triangle_header(ws, prefix)
+# ------------------------------------------------------------------ Pivot_ECL
+def write_raw_pivot_block(ws, r0, title, amt, disb):
+    """RAW actuals block: observed amounts only (immature -> blank), NO yellow,
+    ending in a Grand Total (live =SUM). Returns (first_cohort_row, next_free_row)."""
+    tc = ws.cell(r0, 1, title); tc.font = TITF
+    _hdr_row(ws, r0 + 1, "")
+    top = r0 + 2
     for i, q in enumerate(amt.index):
-        r = 2 + i
+        r = top + i
         ic = ws.cell(r, 1, q); ic.fill, ic.font, ic.alignment, ic.border = IFL, IFONT, C, BD
         dc = ws.cell(r, 2, round(float(disb.iloc[i]), 6)); dc.number_format, dc.border, dc.alignment = CR, BD, C
         for j, m in enumerate(MOB_LIST):
-            c = ws.cell(r, mob_col(j), round(float(amt.iloc[i, j]), 6))
+            val = round(float(amt.iloc[i, j]), 6) if is_mature(q, m) else None   # immature -> blank
+            c = ws.cell(r, mob_col(j), val)
             c.number_format, c.font, c.alignment, c.border = CR, CF, C, BD
-            if not is_mature(q, m): c.fill = YEL
+    gr = top + len(amt.index)
+    gc = ws.cell(gr, 1, "Grand Total"); gc.font, gc.fill, gc.border, gc.alignment = Font(bold=True, size=10), TOT, BD, C
+    for col_ix in [2] + [mob_col(j) for j in range(len(MOB_LIST))]:
+        Lc = get_column_letter(col_ix)
+        t = ws.cell(gr, col_ix, f"=SUM({Lc}{top}:{Lc}{gr-1})")
+        t.number_format, t.font, t.alignment, t.border, t.fill = CR, Font(bold=True, size=10), C, BD, TOT
+    return top, gr + 2
 
 
-def write_badrate_triangle(ws, index, src_sheet="Pivot_90plus", prefix="PD_"):
-    """PD curve as FORMULAS: = 90+ amount / disbursal, referencing src_sheet."""
-    _triangle_header(ws, prefix)
-    for i, q in enumerate(index):
-        r = 2 + i
+# ------------------------------------------------------------------ Workings
+def write_workings_block(ws, r0, title, amt, disb, kind, pivot_top):
+    """CHAIN-LADDER triangle with LIVE formulas.
+       kind='rate'  -> cells are 90+/DISB (%)   ; mature = pivot/DISB
+       kind='amount'-> cells are TPOS (crores)  ; mature = pivot value
+    Immature cells (yellow) carry the bank's chain-ladder formula:
+       =IFERROR( above * SUMPRODUCT(col_top:above, DISB) / SUMPRODUCT(col_top:2above, DISB), 0)
+    `pivot_top` = first cohort row of the matching block on Pivot_ECL.
+    Returns (first_cohort_row, next_free_row)."""
+    fmt = PC if kind == "rate" else CR
+    tc = ws.cell(r0, 1, title); tc.font = TITF
+    _hdr_row(ws, r0 + 1, "")
+    top = r0 + 2
+    for i, q in enumerate(amt.index):
+        r = top + i
+        pr = pivot_top + i                                  # matching Pivot_ECL row
         ic = ws.cell(r, 1, q); ic.fill, ic.font, ic.alignment, ic.border = IFL, IFONT, C, BD
-        dc = ws.cell(r, 2, f"='{src_sheet}'!$B{r}"); dc.number_format, dc.border, dc.alignment = CR, BD, C
+        dc = ws.cell(r, 2, round(float(disb.iloc[i]), 6)); dc.number_format, dc.border, dc.alignment = CR, BD, C
         for j, m in enumerate(MOB_LIST):
-            c = ws.cell(r, mob_col(j), f"=IFERROR('{src_sheet}'!{mob_letter(j)}{r}/'{src_sheet}'!$B{r},0)")
-            c.number_format, c.font, c.alignment, c.border = PC, CF, C, BD
-            if not is_mature(q, m): c.fill = YEL
+            X = mob_letter(j)
+            c = ws.cell(r, mob_col(j))
+            if is_mature(q, m):                             # observed -> link to raw pivot
+                if kind == "rate":
+                    c.value = f"=IFERROR('{PIVOT}'!{X}{pr}/'{PIVOT}'!$B{pr},0)"
+                else:
+                    c.value = f"='{PIVOT}'!{X}{pr}"
+            else:                                           # projected -> chain-ladder formula
+                num = f"SUMPRODUCT({X}${top}:{X}{r-1},$B${top}:$B{r-1})"
+                den = f"SUMPRODUCT({X}${top}:{X}{r-2},$B${top}:$B{r-2})"
+                c.value = f"=IFERROR({X}{r-1}*{num}/{den},0)"
+                c.fill = YEL
+            c.number_format, c.font, c.alignment, c.border = fmt, CF, C, BD
+    return top, top + len(amt.index) + 1
 
 
 def build_excel(feed, tris, lrr, ecl, path=OUT):
@@ -102,18 +146,18 @@ def build_excel(feed, tris, lrr, ecl, path=OUT):
     for df in (a90, atp):
         df.columns = [int(c) for c in df.columns]
     cohorts = list(a90.index)
-    row_of = {q: 2 + i for i, q in enumerate(cohorts)}
+    n = len(cohorts)
 
     wb = Workbook()
     wb.calculation.fullCalcOnLoad = True
 
-    # 1) Summary
+    # ---------------------------------------------------------------- Summary
     ws = wb.active; ws.title = "Summary"
     headline_row = 2 + int(list(wavg.index[wavg.WINDOW == HEADLINE])[0])
     tpos_row, ecl_row = 3 + len(wavg), 4 + len(wavg)
     rows = [
         ("As-of date", str(AS_OF), None),
-        ("Cohorts (FY quarters)", len(cohorts), None),
+        ("Cohorts (FY quarters)", n, None),
         ("MOB grid", f"0..120 step 3  ({len(MOB_LIST)} points)", None),
         ("Loss-rate anchors", "84M and 120M", None),
         ("Headline window", HEADLINE, None),
@@ -129,8 +173,8 @@ def build_excel(feed, tris, lrr, ecl, path=OUT):
         if fmt: vc.number_format = fmt
     ws.column_dimensions["A"].width = 32; ws.column_dimensions["B"].width = 46
 
-    # 2) data_ecl
-    ws = wb.create_sheet("data_ecl")
+    # ---------------------------------------------------------- DATA_ECL_NEW
+    ws = wb.create_sheet("DATA_ECL_NEW")
     for j, h in enumerate(feed.columns, 1):
         c = ws.cell(1, j, h); c.fill, c.font, c.alignment, c.border = HF, HFONT, C, BD
     for i, row in feed.iterrows():
@@ -141,61 +185,74 @@ def build_excel(feed, tris, lrr, ecl, path=OUT):
             elif col not in ("FY_QUARTER", "SEGMENT"): c.number_format = CR
     ws.freeze_panes = "C2"; ws.column_dimensions["A"].width = 12
 
-    # 3-4) amount triangles (values)
-    write_amount_triangle(wb.create_sheet("Pivot_90plus"), a90, disb)
-    write_amount_triangle(wb.create_sheet("Pivot_TPOS"),   atp, disb)
+    # ------------------------------------------------------------- Pivot_ECL
+    ws = wb.create_sheet(PIVOT); _widths(ws)
+    p90_top, nxt = write_raw_pivot_block(ws, 1,   "90+ SETTLEMENT (raw actuals, cr)", a90, disb)
+    ptp_top, _   = write_raw_pivot_block(ws, nxt, "TPOS (raw actuals, cr)",           atp, disb)
+    ws.freeze_panes = ws.cell(3, MOB_COL0)
 
-    # 5) BadRate_90plus (PD formulas)
-    write_badrate_triangle(wb.create_sheet("BadRate_90plus"), cohorts, "Pivot_90plus", "PD_")
+    # -------------------------------------------------------------- Workings
+    ws = wb.create_sheet(WORK); _widths(ws)
+    w90_top, nxt = write_workings_block(ws, 1,   "90+% (chain ladder, rate = 90+/DISB)", a90, disb, "rate",   p90_top)
+    wtp_top, _   = write_workings_block(ws, nxt, "TPOS (chain ladder, amount cr)",       atp, disb, "amount", ptp_top)
+    ws.freeze_panes = ws.cell(3, MOB_COL0)
+    w90_row = {q: w90_top + i for i, q in enumerate(cohorts)}
+    wtp_row = {q: wtp_top + i for i, q in enumerate(cohorts)}
 
-    # 6) Movements (formula links)
-    #    Mentor's layout:  TPOS movement -> amount AND %   |   90+ movement -> % only
-    #    % blocks = anchor-MOB level / DISB (col B of the source pivot); PC format
-    #    means every % cell renders with a "%" sign (e.g. 2.94%).
-    ws = wb.create_sheet("Movements")
-    def mv_block(r0, title, prefix, src_sheet, kind="amount"):
+    # --------------------------------------------------------- Final_Workings
+    ws = wb.create_sheet("Final_Workings")
+    def mv_block(r0, title, prefix, kind, src_row, src_is_rate_block):
+        """kind: 'amount' (link), 'pct' (link/DISB). src_row maps cohort->Workings row.
+        src_is_rate_block True means the Workings source cells are ALREADY %."""
         fmt = CR if kind == "amount" else PC
-        tc = ws.cell(r0, 1, title); tc.font = Font(bold=True, size=10)   # section label
+        tc = ws.cell(r0, 1, title); tc.font = Font(bold=True, size=10)
         r0 += 1
         for j, h in enumerate(["FY_QUARTER"] + [f"{prefix}{m}MOB" for m in ANCHORS], 1):
             c = ws.cell(r0, j, h); c.fill, c.font, c.alignment, c.border = HF, HFONT, C, BD
         for i, q in enumerate(cohorts):
-            rr = r0 + 1 + i; src_r = row_of[q]
+            rr = r0 + 1 + i; sr = src_row[q]
             ic = ws.cell(rr, 1, q); ic.fill, ic.font, ic.border = IFL, IFONT, BD
-            for j, m in enumerate(ANCHORS):
-                ref = f"'{src_sheet}'!{anchor_letter(m)}{src_r}"
-                formula = f"={ref}" if kind == "amount" else f"=IFERROR({ref}/'{src_sheet}'!$B{src_r},0)"
-                c = ws.cell(rr, 2 + j, formula)
+            for j, a in enumerate(ANCHORS):
+                cell = f"'{WORK}'!{anchor_letter(a)}{sr}"
+                if kind == "amount":
+                    f = f"={cell}"
+                elif src_is_rate_block:                     # already % -> link straight
+                    f = f"={cell}"
+                else:                                       # amount -> % of DISB
+                    f = f"=IFERROR({cell}/'{WORK}'!$B{sr},0)"
+                c = ws.cell(rr, 2 + j, f)
                 c.number_format, c.alignment, c.border = fmt, C, BD
         return r0 + 1 + len(cohorts)
-    end = mv_block(1,       "TPOS movement (amount, cr)",     "TPOS_AMT_",   "Pivot_TPOS",   "amount")
-    end = mv_block(end + 2, "TPOS movement (% of disbursal)", "TPOS_PCT_",   "Pivot_TPOS",   "rate")
-    end = mv_block(end + 2, "90+ movement (% of disbursal)",  "90PLUS_PCT_", "Pivot_90plus", "rate")
+    end = mv_block(1,       "TPOS movement (amount, cr)",     "TPOS_AMT_",   "amount", wtp_row, False)
+    end = mv_block(end + 2, "TPOS movement (% of disbursal)", "TPOS_PCT_",   "pct",    wtp_row, False)
+    end = mv_block(end + 2, "90+ movement (% of disbursal)",  "90PLUS_PCT_", "pct",    w90_row, True)
     ws.column_dimensions["A"].width = 12
 
-    # 7) LossRate_Qtr (formulas)
-    ws = wb.create_sheet("LossRate_Qtr")
+    # -------------------------------------------------------------- LossRate
+    ws = wb.create_sheet("LossRate")
     for j, h in enumerate(["FY_QUARTER", "DISB_AMT (weight)", "LOSS_RATE_84M", "LOSS_RATE_120M",
                            "CURRENT_MOB", "CURRENT_TPOS"], 1):
         c = ws.cell(1, j, h); c.fill, c.font, c.alignment, c.border = HF, HFONT, C, BD
+    lr_row = {}
     for i, rowq in qtr.iterrows():
-        q = rowq.FY_QUARTER; rr = 2 + i; src_r = row_of[q]
+        q = rowq.FY_QUARTER; rr = 2 + i; lr_row[q] = rr
+        w9, wt = w90_row[q], wtp_row[q]
         ic = ws.cell(rr, 1, q); ic.fill, ic.font = IFL, IFONT
-        ws.cell(rr, 2, f"='Pivot_90plus'!$B{src_r}").number_format = CR
+        ws.cell(rr, 2, f"='{WORK}'!$B{w9}").number_format = CR       # disbursal weight
         for k, A in enumerate(ANCHOR_MOBS):
-            num = f"'Pivot_90plus'!{anchor_letter(A)}{src_r}"
-            den = "+".join(f"'Pivot_TPOS'!{anchor_letter(a)}{src_r}" for a in anchors_for(A))
-            cc = ws.cell(rr, 3 + k, f"=IFERROR({num}/({den}),0)"); cc.number_format = PC
+            # 90+ amount@A = (Workings 90+% @A) * DISB ; TPOS sum = Workings TPOS amounts
+            num = f"'{WORK}'!{anchor_letter(A)}{w9}*'{WORK}'!$B{w9}"
+            den = "+".join(f"'{WORK}'!{anchor_letter(a)}{wt}" for a in anchors_for(A))
+            cc = ws.cell(rr, 3 + k, f"=IFERROR(({num})/({den}),0)"); cc.number_format = PC
             if rowq[f"LOSS_RATE_{A}M"] > 1: cc.fill = WARN
         ws.cell(rr, 5, int(rowq.CURRENT_MOB))
-        cm_letter = mob_letter(MOB_LIST.index(int(rowq.CURRENT_MOB)))
-        ws.cell(rr, 6, f"='Pivot_TPOS'!{cm_letter}{src_r}").number_format = CR
+        cm = anchor_letter(int(rowq.CURRENT_MOB)) if int(rowq.CURRENT_MOB) in MOB_LIST else mob_letter(0)
+        ws.cell(rr, 6, f"='{WORK}'!{cm}{wt}").number_format = CR
         for cc in range(1, 7): ws.cell(rr, cc).alignment = C; ws.cell(rr, cc).border = BD
-    last_lr_row = 1 + len(qtr)
     ws.column_dimensions["A"].width = 12
     for col in "BCDEF": ws.column_dimensions[col].width = 16
 
-    # 8) Weighted_LR (formulas)
+    # ------------------------------------------------------------ Weighted_LR
     ws = wb.create_sheet("Weighted_LR")
     heads = ["WINDOW", "FY_START", "FY_END", "ANCHOR", "N_QTRS", "TOTAL_DISB", "SIMPLE_AVG", "WEIGHTED_AVG"]
     for j, h in enumerate(heads, 1):
@@ -204,11 +261,11 @@ def build_excel(feed, tris, lrr, ecl, path=OUT):
     for i, r in wavg.iterrows():
         rr = 2 + i
         k1, k2 = fy_key(r.FY_START), fy_key(r.FY_END)
-        win_rows = [row_of[q] for q in cohorts if k1 <= fy_key(q) <= k2]
+        win_rows = [lr_row[q] for q in cohorts if k1 <= fy_key(q) <= k2]
         r1, r2 = min(win_rows), max(win_rows)
         LRc = lr_col[int(r.ANCHOR_MOB)]
-        disb_rng = f"LossRate_Qtr!$B{r1}:$B{r2}"
-        lr_rng   = f"LossRate_Qtr!{LRc}{r1}:{LRc}{r2}"
+        disb_rng = f"LossRate!$B{r1}:$B{r2}"
+        lr_rng   = f"LossRate!{LRc}{r1}:{LRc}{r2}"
         ws.cell(rr, 1, r.WINDOW); ws.cell(rr, 2, r.FY_START); ws.cell(rr, 3, r.FY_END)
         ws.cell(rr, 4, int(r.ANCHOR_MOB)); ws.cell(rr, 5, r2 - r1 + 1)
         ws.cell(rr, 6, f"=SUM({disb_rng})").number_format = CR
