@@ -149,19 +149,28 @@ def build_excel(feed, tris, lrr, ecl, path=OUT):
     write_badrate_triangle(wb.create_sheet("BadRate_90plus"), cohorts, "Pivot_90plus", "PD_")
 
     # 6) Movements (formula links)
+    #    Mentor's layout:  TPOS movement -> amount AND %   |   90+ movement -> % only
+    #    % blocks = anchor-MOB level / DISB (col B of the source pivot); PC format
+    #    means every % cell renders with a "%" sign (e.g. 2.94%).
     ws = wb.create_sheet("Movements")
-    def mv_block(r0, prefix, src_sheet):
+    def mv_block(r0, title, prefix, src_sheet, kind="amount"):
+        fmt = CR if kind == "amount" else PC
+        tc = ws.cell(r0, 1, title); tc.font = Font(bold=True, size=10)   # section label
+        r0 += 1
         for j, h in enumerate(["FY_QUARTER"] + [f"{prefix}{m}MOB" for m in ANCHORS], 1):
             c = ws.cell(r0, j, h); c.fill, c.font, c.alignment, c.border = HF, HFONT, C, BD
         for i, q in enumerate(cohorts):
             rr = r0 + 1 + i; src_r = row_of[q]
             ic = ws.cell(rr, 1, q); ic.fill, ic.font, ic.border = IFL, IFONT, BD
             for j, m in enumerate(ANCHORS):
-                c = ws.cell(rr, 2 + j, f"='{src_sheet}'!{anchor_letter(m)}{src_r}")
-                c.number_format, c.alignment, c.border = CR, C, BD
+                ref = f"'{src_sheet}'!{anchor_letter(m)}{src_r}"
+                formula = f"={ref}" if kind == "amount" else f"=IFERROR({ref}/'{src_sheet}'!$B{src_r},0)"
+                c = ws.cell(rr, 2 + j, formula)
+                c.number_format, c.alignment, c.border = fmt, C, BD
         return r0 + 1 + len(cohorts)
-    end = mv_block(1, "TPOS_", "Pivot_TPOS")
-    mv_block(end + 2, "90PLUS_", "Pivot_90plus")
+    end = mv_block(1,       "TPOS movement (amount, cr)",     "TPOS_AMT_",   "Pivot_TPOS",   "amount")
+    end = mv_block(end + 2, "TPOS movement (% of disbursal)", "TPOS_PCT_",   "Pivot_TPOS",   "rate")
+    end = mv_block(end + 2, "90+ movement (% of disbursal)",  "90PLUS_PCT_", "Pivot_90plus", "rate")
     ws.column_dimensions["A"].width = 12
 
     # 7) LossRate_Qtr (formulas)
