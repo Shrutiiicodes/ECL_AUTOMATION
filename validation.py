@@ -66,7 +66,7 @@ def validate(feed, tris, lrr, ecl, db_path=DB_PATH) -> list:
     m = base.set_index("distinct_loan_no")[["FY_QUARTER", "segment", "disbursal_amount"]]
     g = m.join(bad.add_prefix("bad_")).join(tps.add_prefix("tps_")).groupby(["FY_QUARTER", "segment"])
     exp = pd.DataFrame({"LAN_CNT": g.size(), "DISBURSAL_AMT": g.disbursal_amount.sum() / 1e7})
-    for mob in MOB_LIST:
+    for mob in MOB_SQL:
         exp[f"AMT_90PLUS_SETTLEMENT_{mob}MOB"] = g[f"bad_{mob}"].sum() / 1e7
         exp[f"TPOS_{mob}MOB"]                  = g[f"tps_{mob}"].sum() / 1e7
 
@@ -83,8 +83,8 @@ def validate(feed, tris, lrr, ecl, db_path=DB_PATH) -> list:
 
     add("LAN_CNT", int((feed_idx.LAN_CNT - exp.LAN_CNT).abs().max()), exact=True)
     add("DISBURSAL_AMT", float((feed_idx.DISBURSAL_AMT - exp.DISBURSAL_AMT).abs().max()))
-    bc = [f"AMT_90PLUS_SETTLEMENT_{m}MOB" for m in MOB_LIST]
-    tc = [f"TPOS_{m}MOB" for m in MOB_LIST]
+    bc = [f"AMT_90PLUS_SETTLEMENT_{m}MOB" for m in MOB_SQL]
+    tc = [f"TPOS_{m}MOB" for m in MOB_SQL]
     add("90+ sums (all MOB)",  float((feed_idx[bc].fillna(0) - exp[bc].fillna(0)).abs().values.max()))
     add("TPOS sums (all MOB)", float((feed_idx[tc].fillna(0) - exp[tc].fillna(0)).abs().values.max()))
 

@@ -154,17 +154,19 @@ def build_excel(feed, tris, lrr, ecl, path=OUT):
     # ---------------------------------------------------------------- Summary
     ws = wb.active; ws.title = "Summary"
     headline_row = 2 + int(list(wavg.index[wavg.WINDOW == HEADLINE])[0])
-    tpos_row, ecl_row = 3 + len(wavg), 4 + len(wavg)
+    tpos_row, ecl_row = 4 + len(wavg), 4 + len(wavg)
     rows = [
         ("As-of date", str(AS_OF), None),
         ("Cohorts (FY quarters)", n, None),
-        ("MOB grid", f"0..120 step 3  ({len(MOB_LIST)} points)", None),
+        ("MOB grid", f"3..120 step 3  ({len(MOB_LIST)} pivot points; 0MOB extracted, not pivoted)", None),
         ("Loss-rate anchors", "84M and 120M", None),
         ("Headline window", HEADLINE, None),
         ("Weighted-avg loss rate", f"='Weighted_LR'!H{headline_row}", PC),
         ("Window total disbursal (cr)", f"='Weighted_LR'!B{tpos_row}", CR),
-        ("ECL (cr)", f"='Weighted_LR'!B{ecl_row}", CR),
-        ("Final-ECL rule", "weighted-avg LR x observation-window disbursal", None),
+        ("ECL %", f"='Weighted_LR'!H{headline_row}", PC),
+        ("ECL (cr) [derived only info]", f"='Weighted_LR'!B{ecl_row}", CR),
+        ("Final-ECL rule", "ECL = disbursal-weighted avg loss rate of the observation window", None),
+
     ]
     for i, (k, v, fmt) in enumerate(rows):
         r = 1 + i
@@ -275,10 +277,12 @@ def build_excel(feed, tris, lrr, ecl, path=OUT):
         if r.WEIGHTED_AVG_LR > 1: wc.fill = WARN
         for cc in range(1, 9): ws.cell(rr, cc).alignment = C; ws.cell(rr, cc).border = BD
     r0 = 3 + len(wavg)
-    ws.cell(r0, 1, "Headline window total disbursal (cr)").font = Font(bold=True)
-    ws.cell(r0, 2, f"=F{headline_row}").number_format = CR
-    ws.cell(r0 + 1, 1, "ECL (cr) = weighted LR x window disbursal").font = Font(bold=True)
-    ec = ws.cell(r0 + 1, 2, f"=H{headline_row}*F{headline_row}"); ec.number_format = CR; ec.fill = TOT
+    ws.cell(r0, 1, "ECL (%) = weighted-avg LR of headline window").font = Font(bold=True)
+    ep = ws.cell(r0, 2, f"=H{headline_row}"); ep.number_format = PC; ep.fill = TOT
+    ws.cell(r0 + 1, 1, "Headline window total disbursal (cr)").font = Font(bold=True)
+    ws.cell(r0 + 1, 2, f"=F{headline_row}").number_format = CR
+    ws.cell(r0 + 2, 1, "ECL (cr) [derived, info only]").font = Font(bold=True)
+    ec = ws.cell(r0 + 2, 2, f"=H{headline_row}*F{headline_row}"); ec.number_format = CR
     for col, w in zip("ABCDEFGH", [20, 10, 10, 9, 9, 14, 13, 14]):
         ws.column_dimensions[col].width = w
 

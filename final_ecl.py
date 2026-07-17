@@ -44,7 +44,8 @@ class FinalECL(NamedTuple):
     by_quarter: pd.DataFrame  # loss table + CURRENT_MOB + CURRENT_TPOS (was ecl_by_quarter.csv)
     wavg: pd.DataFrame        # one row per observation window (was weighted_loss_rate.csv)
     portfolio_tpos: float     # sum of current-TPOS diagonal (crores) - INFO ONLY, not the exposure
-    portfolio_ecl: float      # headline weighted_LR x headline window disbursal (the ECL)
+    ecl_pct: float            # THE ECL: headline window's weighted-avg loss rate (%)
+    ecl_amount: float
 
 # current exposure = diagonal of TPOS triangle
 def quarter_end(label):
@@ -57,7 +58,7 @@ def current_mob(label, as_of=AS_OF):
     qe = quarter_end(label)
     months = (as_of.year - qe.year) * 12 + (as_of.month - qe.month)
     valid = [m for m in MOB_LIST if m <= months]
-    return max(valid) if valid else 0
+    return max(valid) if valid else -1
 
 
 def run(loss: pd.DataFrame, atp: pd.DataFrame) -> FinalECL:
@@ -66,7 +67,10 @@ def run(loss: pd.DataFrame, atp: pd.DataFrame) -> FinalECL:
     atp = atp.copy(); atp.columns = [int(c) for c in atp.columns]
 
     loss["CURRENT_MOB"]  = loss.FY_QUARTER.map(current_mob)
-    loss["CURRENT_TPOS"] = [atp.loc[q, current_mob(q)] for q in loss.FY_QUARTER]
+    loss["CURRENT_TPOS"] = [
+        atp.loc[q, cm] if (cm := current_mob(q)) in atp.columns else 0.0
+        for q in loss.FY_QUARTER
+    ]
     portfolio_tpos = loss.CURRENT_TPOS.sum()
 
     # WEIGHTED AVERAGE LOSS RATE PER WINDOW
@@ -79,14 +83,16 @@ def run(loss: pd.DataFrame, atp: pd.DataFrame) -> FinalECL:
         rows.append({"WINDOW": label, "FY_START": q1, "FY_END": q2, "ANCHOR_MOB": A,
                      "N_QUARTERS": len(win), "TOTAL_DISB": w.sum(),
                      "SIMPLE_AVG_LR": float(lr.mean()), "WEIGHTED_AVG_LR": wavg,
-                     "ECL_IF_APPLIED": wavg * w.sum()})
+                     "ECL_PCT": wavg,                     # the ECL for this window
+                     "ECL_AMT_DERIVED": wavg * w.sum()})  # info only
     wavg_df = pd.DataFrame(rows)
 
     headline = wavg_df[wavg_df.WINDOW == HEADLINE].iloc[0]
-    portfolio_ecl = headline.WEIGHTED_AVG_LR * headline.TOTAL_DISB
+    ecl_pct    = float(headline.WEIGHTED_AVG_LR)          # reported figure
+    ecl_amount = ecl_pct * float(headline.TOTAL_DISB)     # derived, info only
 
-    return FinalECL(by_quarter=loss, wavg=wavg_df,
-                    portfolio_tpos=portfolio_tpos, portfolio_ecl=portfolio_ecl)
+    return FinalECL(by_quarter=loss, wavg=wavg_df, portfolio_tpos=portfolio_tpos,
+                    ecl_pct=ecl_pct, ecl_amount=ecl_amount)
 
 
 # Standalone entrypoint: disk I/O + presentation-only Excel.

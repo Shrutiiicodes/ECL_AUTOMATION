@@ -78,7 +78,7 @@ oad         = np.where(is_default,
                        np.round(amt_rupees * np.clip(1 - default_mob / tenure, 0, 1), 2),
                        0.0)
 
-mob_arr = np.array(MOB_LIST)                                # shape (41,)
+mob_arr = np.array(MOB_SQL)                                 # shape (41,) - extraction grid
 # amortising outstanding for every loan x MOB (rupees)
 ratio   = np.clip(1 - mob_arr[None, :] / tenure[:, None], 0, 1)          # (N,41)
 tpos    = np.round(amt_rupees[:, None] * ratio, 2)                        # (N,41)

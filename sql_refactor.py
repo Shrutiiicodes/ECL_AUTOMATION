@@ -105,7 +105,7 @@ ORDER BY {FY_SORT_SQL}, b.segment;
 """.strip()
 
 
-def run(db_path=DB_PATH, start_disb=START_DISB, end_disb=END_DISB, mob_list=MOB_LIST) -> SqlOutput:
+def run(db_path=DB_PATH, start_disb=START_DISB, end_disb=END_DISB, mob_list=MOB_SQL) -> SqlOutput:
     """Generate the query, run it against the DB, return the summary feed. No file I/O."""
     sql = build_summary_sql(mob_list)
     con = sqlite3.connect(db_path)
@@ -145,9 +145,9 @@ def _reconcile(feed: pd.DataFrame, db_path=DB_PATH) -> None:
     print("=" * 60)
     print("PHASE 1 COMPLETE  -  reconciliation vs independent pandas")
     print("=" * 60)
-    print(f"SQL replaced          : {len(MOB_LIST)*2} joins  ->  1 aggregation CTE")
+    print(f"SQL replaced          : {len(MOB_SQL)*2} joins  ->  1 aggregation CTE")
     print(f"summary rows          : {len(feed)}  (FY_QUARTER x SEGMENT)")
-    print(f"columns               : {feed.shape[1]}  (2 keys + LAN_CNT + DISB + {len(MOB_LIST)}x2 MOB)")
+    print(f"columns               : {feed.shape[1]}  (2 keys + LAN_CNT + DISB + {len(MOB_SQL)}x2 MOB)")
     print(f"LAN_CNT total         : {feed.LAN_CNT.sum():,}  (should be <= 60,000)")
     print(f"DISBURSAL_AMT total   : {feed.DISBURSAL_AMT.sum():,.2f} cr")
 

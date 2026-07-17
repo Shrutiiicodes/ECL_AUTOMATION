@@ -20,8 +20,13 @@ START      = date(2015, 4, 1)
 START_DISB = START.isoformat()
 END_DISB   = AS_OF.isoformat()
 
-# MOB grid: 0,3,6,...,120  (41 points)
-MOB_LIST = list(range(0, 121, 3))
+# MOB grids - deliberately two, do not merge them:
+#   MOB_SQL  : 0,3,...,120  (41 pts)  what the extraction layer CAPTURES.
+#              0MOB is captured because the bank's extract captures it.
+#   MOB_LIST : 3,6,...,120  (40 pts)  the PIVOT / TRIANGLE grid, per spec.
+#              0MOB is never a pivot column, so it is never chain-laddered.
+MOB_SQL  = list(range(0, 121, 3))
+MOB_LIST = list(range(3, 121, 3))
 
 # loss-rate anchors.  LR_A = 90+ @ A / SUM(TPOS 12,24,...,A)
 ANCHOR_MOBS = [84, 120]
