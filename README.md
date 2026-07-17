@@ -59,7 +59,7 @@ validation.validate(out.feed, tris, lrr, ecl, DB_PATH)
 | 1 | `sql_refactor.py` | `run() → SqlOutput(feed, sql)` | `data_ecl` summary (one row per FY_QUARTER × SEGMENT); generated SQL replaces ~82 joins |
 | 2 | `chain_ladder.py` | `run() → Triangles(r90, a90, rtp, atp, mat90, mattp, disb, feed)` | Completed 90+ / TPOS triangles |
 | 3 | `loss_rate.py` | `run() → LossRates(loss, mv90, mvtp)` | Movement tables + per-quarter loss rate at **84M** and **120M** |
-| 4 | `final_ecl.py` | `run() → FinalECL(by_quarter, wavg, portfolio_tpos, portfolio_ecl)` | Disbursal-weighted average loss rate per observation window |
+| 4 | `final_ecl.py` | `run() → FinalECL(by_quarter, wavg, portfolio_tpos)` | Disbursal-weighted average loss rate per observation window |
 | 5 | `report.py` | `build_excel()` | `ECL_Report.xlsx` |
 | 6 | `validation.py` | `validate() → list[Check]` | `validation_report.xlsx` (independent reconciliation) |
 
@@ -101,7 +101,7 @@ reproducing `=SUMPRODUCT(O125:O140,$B125:$B140)/SUM($B125:$B140)`. Weights are d
 | FY16–FY23 @ 84M | FY16-Q1 → FY23-Q4 | 84M |
 | FY16–FY23 @ 120M | FY16-Q1 → FY23-Q4 | 120M |
 
-**Provisional final step:** `ECL = headline weighted_LR × portfolio current TPOS`, where current TPOS is the latest observed outstanding (triangle diagonal). The weighted rate is per spec;
+**Final step:** The weighted rate is per spec;
 
 ## Changing the quarter
 

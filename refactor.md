@@ -69,7 +69,7 @@ base_loans.py        Phase 0 — synthetic data → ecl.db  (dropped for real da
 sql_refactor.py      run() → feed DataFrame from SQL
 chain_ladder.py      run(feed) → Triangles(r90, a90, rtp, atp, mat90, mattp, disb, feed)
 loss_rate.py         run(a90, atp, feed) → LossRates(loss, mv90, mvtp)
-final_ecl.py         run(loss, atp) → FinalECL(by_quarter, wavg, portfolio_tpos, portfolio_ecl)
+final_ecl.py         run(loss, atp) → FinalECL(by_quarter, wavg, portfolio_tpos)
 report.py            build_excel(feed, tris, lrr, ecl) → ECL_Report.xlsx
 validation.py        validate(feed, tris, lrr, ecl) → [Check]; overall_status(); write_report()
 main.py              orchestrator: chains the above in memory, logging + stop-on-failure

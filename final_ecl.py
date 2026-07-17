@@ -45,7 +45,6 @@ class FinalECL(NamedTuple):
     wavg: pd.DataFrame        # one row per observation window (was weighted_loss_rate.csv)
     portfolio_tpos: float     # sum of current-TPOS diagonal (crores) - INFO ONLY, not the exposure
     ecl_pct: float            # THE ECL: headline window's weighted-avg loss rate (%)
-    ecl_amount: float
 
 # current exposure = diagonal of TPOS triangle
 def quarter_end(label):
@@ -83,16 +82,13 @@ def run(loss: pd.DataFrame, atp: pd.DataFrame) -> FinalECL:
         rows.append({"WINDOW": label, "FY_START": q1, "FY_END": q2, "ANCHOR_MOB": A,
                      "N_QUARTERS": len(win), "TOTAL_DISB": w.sum(),
                      "SIMPLE_AVG_LR": float(lr.mean()), "WEIGHTED_AVG_LR": wavg,
-                     "ECL_PCT": wavg,                     # the ECL for this window
-                     "ECL_AMT_DERIVED": wavg * w.sum()})  # info only
+                     "ECL_PCT": wavg})                    # the ECL for this window
     wavg_df = pd.DataFrame(rows)
 
     headline = wavg_df[wavg_df.WINDOW == HEADLINE].iloc[0]
     ecl_pct    = float(headline.WEIGHTED_AVG_LR)          # reported figure
-    ecl_amount = ecl_pct * float(headline.TOTAL_DISB)     # derived, info only
-
     return FinalECL(by_quarter=loss, wavg=wavg_df, portfolio_tpos=portfolio_tpos,
-                    ecl_pct=ecl_pct, ecl_amount=ecl_amount)
+                    ecl_pct=ecl_pct)
 
 
 # Standalone entrypoint: disk I/O + presentation-only Excel.
@@ -103,7 +99,7 @@ def _to_excel(res: FinalECL, path: str) -> None:
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
     wavg_df, loss = res.wavg, res.by_quarter
-    portfolio_tpos, portfolio_ecl = res.portfolio_tpos, res.portfolio_ecl
+    portfolio_tpos = res.portfolio_tpos
 
     HF = PatternFill("solid", fgColor="1F4E78"); HFONT = Font(bold=True, color="FFFFFF")
     IFL = PatternFill("solid", fgColor="DDEBF7"); TOT = PatternFill("solid", fgColor="C6E0B4")
@@ -128,8 +124,6 @@ def _to_excel(res: FinalECL, path: str) -> None:
     ws.cell(r0, 1, "Headline window").font = Font(bold=True); ws.cell(r0, 2, HEADLINE)
     ws.cell(r0 + 1, 1, "Portfolio current TPOS (cr)").font = Font(bold=True)
     ws.cell(r0 + 1, 2, round(portfolio_tpos, 4)).number_format = CR
-    ws.cell(r0 + 2, 1, "Portfolio ECL (cr)  [provisional]").font = Font(bold=True)
-    ec = ws.cell(r0 + 2, 2, round(portfolio_ecl, 4)); ec.number_format = CR; ec.fill = TOT
     for col, w in zip("ABCDEFGH", [20, 10, 10, 9, 9, 14, 13, 14]):
         ws.column_dimensions[col].width = w
 
@@ -155,7 +149,7 @@ def _to_excel(res: FinalECL, path: str) -> None:
 
 def _print_summary(res: FinalECL) -> None:
     wavg_df, loss = res.wavg, res.by_quarter
-    portfolio_tpos, portfolio_ecl = res.portfolio_tpos, res.portfolio_ecl
+    portfolio_tpos = res.portfolio_tpos
     headline = wavg_df[wavg_df.WINDOW == HEADLINE].iloc[0]
 
     print("=" * 68); print("FINAL ECL  -  weighted-average loss rate"); print("=" * 68)
@@ -174,8 +168,7 @@ def _print_summary(res: FinalECL) -> None:
     print(f"\nhand-check {HEADLINE} ({len(win)} qtrs, {q1}..{q2}):")
     print(f"    SUMPRODUCT = {sp:.6f}   SUM(disb) = {sw:.6f}   -> {sp/sw:.6%}")
     print(f"    engine     = {headline.WEIGHTED_AVG_LR:.6%}   match = {np.isclose(sp/sw, headline.WEIGHTED_AVG_LR)}")
-    print(f"\nECL ({HEADLINE}) = weighted_LR x window disbursal = {portfolio_ecl:,.2f} cr"
-          f"   (= {headline.WEIGHTED_AVG_LR:.4%} of {headline.TOTAL_DISB:,.2f} cr disbursal)")
+    print(f"\nECL ({HEADLINE}) = weighted_LR = {headline.WEIGHTED_AVG_LR:.4%}")
     print(f"    [info only] portfolio current TPOS = {portfolio_tpos:,.2f} cr")
 
 

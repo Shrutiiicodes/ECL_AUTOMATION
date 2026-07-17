@@ -164,7 +164,6 @@ def build_excel(feed, tris, lrr, ecl, path=OUT):
         ("Weighted-avg loss rate", f"='Weighted_LR'!H{headline_row}", PC),
         ("Window total disbursal (cr)", f"='Weighted_LR'!B{tpos_row}", CR),
         ("ECL %", f"='Weighted_LR'!H{headline_row}", PC),
-        ("ECL (cr) [derived only info]", f"='Weighted_LR'!B{ecl_row}", CR),
         ("Final-ECL rule", "ECL = disbursal-weighted avg loss rate of the observation window", None),
 
     ]
@@ -281,8 +280,6 @@ def build_excel(feed, tris, lrr, ecl, path=OUT):
     ep = ws.cell(r0, 2, f"=H{headline_row}"); ep.number_format = PC; ep.fill = TOT
     ws.cell(r0 + 1, 1, "Headline window total disbursal (cr)").font = Font(bold=True)
     ws.cell(r0 + 1, 2, f"=F{headline_row}").number_format = CR
-    ws.cell(r0 + 2, 1, "ECL (cr) [derived, info only]").font = Font(bold=True)
-    ec = ws.cell(r0 + 2, 2, f"=H{headline_row}*F{headline_row}"); ec.number_format = CR
     for col, w in zip("ABCDEFGH", [20, 10, 10, 9, 9, 14, 13, 14]):
         ws.column_dimensions[col].width = w
 
