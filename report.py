@@ -4,7 +4,7 @@ EXCEL REPORT GENERATION  (live-formula edition, mentor 4+3 tab layout)
 Sheet map (mirrors the manual workbook):
 
   Summary        headline as-of / ECL (links to Weighted_LR)
-  DATA_ECL_NEW   raw per-segment feed (values)
+  DATA_ECL       raw per-segment feed (values)
   Pivot_ECL      RAW pivot: 90+ amount block + TPOS amount block, each with a
                  Grand Total. Observed cells only; immature cells are BLANK.
                  NO yellow - this is actuals, not projections.
@@ -187,8 +187,8 @@ def build_excel(feed, tris, lrr, ecl, path=OUT):
         if fmt: vc.number_format = fmt
     ws.column_dimensions["A"].width = 32; ws.column_dimensions["B"].width = 46
 
-    # ---------------------------------------------------------- DATA_ECL_NEW
-    ws = wb.create_sheet("DATA_ECL_NEW")
+    # ---------------------------------------------------------- DATA_ECL
+    ws = wb.create_sheet("DATA_ECL")
     for j, h in enumerate(feed.columns, 1):
         c = ws.cell(1, j, h); c.fill, c.font, c.alignment, c.border = HF, HFONT, C, BD
     for i, row in feed.iterrows():

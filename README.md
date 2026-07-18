@@ -21,7 +21,7 @@ End-to-end automation of the quarterly PL (NON-PA) ECL: **SQL → Python → Exc
 
 ## What it does
 
-Replaces the manual quarterly process (run SQL, paste to Excel, build pivots, mark yellow cells, drag chain-ladder formulas, build movement tables, compute loss rates, take the weighted average) with a single run that produces a formatted `ECL_Report.xlsx` (8 tabs) and a `validation_report.xlsx` proving the run reconciles.
+Replaces the manual quarterly process (run SQL, paste to Excel, build pivots, mark yellow cells, drag chain-ladder formulas, build movement tables, compute loss rates, take the weighted average) with a single run that produces a formatted `ECL_Report.xlsx` (7 tabs) and a `validation_report.xlsx` proving the run reconciles.
 
 ## One-command run
 
@@ -31,7 +31,7 @@ python main.py
 
 Runs the full pipeline **in memory** — every phase is a pure function that takes DataFrames and returns DataFrames; the orchestrator chains the results directly with no intermediate CSVs and no shelling out to scripts. Stops on the first failure, prints timings and a validation summary. ≈ 30s on 60k loans.
 
-**Deliverables:** `ECL_Report.xlsx` (8 tabs) and `validation_report.xlsx` (must be all-PASS before you ship).
+**Deliverables:** `ECL_Report.xlsx` (7 tabs) and `validation_report.xlsx` (must be all-PASS before you ship).
 
 ## Architecture
 
@@ -60,7 +60,7 @@ validation.validate(out.feed, tris, lrr, ecl, DB_PATH)
 | 2 | `chain_ladder.py` | `run() → Triangles(r90, a90, rtp, atp, mat90, mattp, disb, feed)` | Completed 90+ / TPOS triangles |
 | 3 | `loss_rate.py` | `run() → LossRates(loss, mv90, mvtp)` | Movement tables + per-quarter loss rate at **84M** and **120M** |
 | 4 | `final_ecl.py` | `run() → FinalECL(by_quarter, wavg, portfolio_tpos)` | Disbursal-weighted average loss rate per observation window |
-| 5 | `report.py` | `build_excel()` | `ECL_Report.xlsx` |
+| 5 | `report.py` | `build_excel()` | `ECL_Report.xlsx` (7 tabs) |
 | 6 | `validation.py` | `validate() → list[Check]` | `validation_report.xlsx` (independent reconciliation) |
 
 Phase 0 is **not** part of the ECL computation — it generates synthetic data because we have no real bank data. It runs automatically when `ecl.db` is missing and is skipped otherwise.
@@ -70,13 +70,12 @@ Phase 0 is **not** part of the ECL computation — it generates synthetic data b
 | # | Tab | Contents |
 |---|-----|----------|
 | 1 | Summary | Cover metrics + headline weighted loss rate |
-| 2 | data_ecl | The SQL feed (FY_QUARTER × SEGMENT) |
-| 3 | Pivot_90plus | 90+ amount triangle, yellow = chain-ladder projected |
-| 4 | Pivot_TPOS | TPOS amount triangle, yellow = projected |
-| 5 | BadRate_90plus | 90+ / DISB rate triangle (PD curve), yellow = projected |
-| 6 | Movements | TPOS + 90+ movement tables (12…120) |
-| 7 | LossRate_Qtr | Per-quarter loss rate at 84M and 120M (>100% flagged red) |
-| 8 | Weighted_LR | SUMPRODUCT(LR, DISB)/SUM(DISB) per observation window |
+| 2 | DATA_ECL | The SQL feed (FY_QUARTER × SEGMENT) |
+| 3 | Pivot_ECL | RAW pivot: 90+ amount block + TPOS amount block, observed actuals only (no projections) |
+| 4 | Workings | Chain-ladder triangles with LIVE Excel formulas: 90+ as % and TPOS as amount. Yellow = projected |
+| 5 | Final_Workings | TPOS movement amount, TPOS movement %, 90+ movement % (12…120) |
+| 6 | LossRate | Per-quarter loss rate at 84M and 120M (>100% flagged red) |
+| 7 | Weighted_LR | SUMPRODUCT(LR, DISB)/SUM(DISB) per observation window + final ECL |
 
 ## The calculation
 
@@ -98,6 +97,7 @@ reproducing `=SUMPRODUCT(O125:O140,$B125:$B140)/SUM($B125:$B140)`. Weights are d
 
 | Window | Range | Anchor |
 |---|---|---|
+| FY20–FY23 @ 84M | FY20-Q1 → FY23-Q4 | 84M |
 | FY16–FY23 @ 84M | FY16-Q1 → FY23-Q4 | 84M |
 | FY16–FY23 @ 120M | FY16-Q1 → FY23-Q4 | 120M |
 
@@ -118,7 +118,7 @@ ECL-AUTOMATION/
 ├── chain_ladder.py      ← Phase 2: triangle build + chain-ladder fill
 ├── loss_rate.py         ← Phase 3: movement tables + loss rates
 ├── final_ecl.py         ← Phase 4: weighted-average loss rate
-├── report.py            ← Phase 5: ECL_Report.xlsx (8 tabs)
+├── report.py            ← Phase 5: ECL_Report.xlsx (7 tabs)
 ├── validation.py        ← Phase 6: independent reconciliation
 ├── requirements.txt     ← numpy, pandas, python-dateutil, openpyxl
 └── .gitignore           ← all .csv/.xlsx/ecl.db are regenerated artifacts
@@ -140,7 +140,7 @@ Today `base_loans.py` generates synthetic data. To run on real bank data, drop t
 
 ## Note: 120M anchor behaviour
 
-The chain-ladder fill compounds **down** each MOB column — every projected cell is the row above scaled by a disbursal-weighted trend factor. Because the 120M anchor has far fewer mature cohorts than the 84M anchor, its projections span more rows and are inherently noisier. Earlier versions of the pipeline produced implausible 120M rates (>100%) due to unchecked geometric compounding; this has since been fixed and both anchors now produce plausible weighted-average loss rates.
+The chain-ladder fill compounds **down** each MOB column. Because the 120M anchor has far fewer mature cohorts than the 84M anchor, its projections span more rows and are inherently noisier. Earlier versions of the pipeline produced implausible 120M rates (>100%) due to unchecked geometric compounding (multiplying the cell directly above). This has since been fixed by anchoring the projection on the **fixed deepest-observed cell** in each column, rather than compounding recursively, ensuring both anchors now produce plausible weighted-average loss rates.
 
 `validation.py` still flags any reported loss rate above 100% as **WARN** as a safety net.
 

@@ -35,7 +35,7 @@ Configuration (`AS_OF`, windows, anchors, file names) was already centralised in
 ## Faithfulness
 
 Every module was verified against the original output before and after the change:
-the SQL feed, all four triangles, movement tables, loss rates, and the 8-sheet
+the SQL feed, all four triangles, movement tables, loss rates, and the 7-sheet
 workbook are identical (27,200 cells checked, 0 differences). The only values that
 moved are two cells at the ~1e-17 level: the in-memory path keeps full float64
 precision instead of truncating to 6 decimals on CSV write, which is why the
@@ -48,18 +48,13 @@ mode it reads the upstream CSVs from disk, runs the same pure function, and writ
 its own CSV/Excel artifacts for inspection — useful for debugging a single phase.
 Only `main.py` avoids disk entirely.
 
-## Open modelling question (needs mentor input)
+## Resolved modelling question (120M anchor)
 
-The 84M loss rate reconciles to the hand calculation exactly. The 120M window
-reports 146.7%, which is impossible: only 5 of 32 window cohorts are mature at
-120M, and the Excel chain-ladder formula compounds geometrically down each column,
-so the 27 immature cohorts inflate. Restricted to genuinely-mature cohorts the
-120M rate is 2.41%, consistent with 84M's mature-only 2.50%.
+The 84M loss rate reconciles to the hand calculation exactly. Initially, the 120M window
+reported >100% loss rates due to the Excel chain-ladder formula's unchecked geometric compounding 
+down each column (the 120M anchor has far fewer mature cohorts than 84M, so immature cohorts inflated).
 
-`validation.py` flags any reported loss rate above 100% as **WARN** rather than
-hiding it. Before the 120M figure can be used, the production behaviour needs
-confirming: does the workbook project deep columns at all, cap them, or restrict
-the 120M window to mature cohorts only?
+This has since been fixed. The projection now anchors on the **fixed deepest-observed cell** in each column rather than multiplying the cell directly above. This ensures the chain-ladder projection does not compound down the column, and both anchors now produce plausible weighted-average loss rates. `validation.py` still flags any reported loss rate above 100% as **WARN** as a safety net.
 
 ## File map
 
