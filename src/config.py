@@ -61,23 +61,23 @@ FREEZE_TPOS_AT_DEFAULT = False
 TOL = 1e-4                      # crore tolerance
 
 # file names
-DB_PATH   = "ecl.db"
-BASE_CSV  = "base_loans.csv"
-PERF_CSV  = "performance_long.csv"
-FEED_CSV  = "data_ecl.csv"
+DB_PATH   = "data/db/ecl.db"
+BASE_CSV  = "data/intermediate/base_loans.csv"
+PERF_CSV  = "data/intermediate/performance_long.csv"
+FEED_CSV  = "data/intermediate/data_ecl.csv"
 OUT_CSV   = FEED_CSV            # alias used by sql_refactor.py
-OUT_SQL   = "phase1_generated.sql"
-TRI_90    = "tri_90plus_amt.csv"
-TRI_TP    = "tri_tpos_amt.csv"
-TRI_90_R  = "tri_90plus_rate.csv"
-TRI_TP_R  = "tri_tpos_rate.csv"
-MV_90     = "movement_90plus.csv"
-MV_TP     = "movement_tpos.csv"
-LOSS_CSV  = "loss_rate.csv"
-WAVG_CSV  = "weighted_loss_rate.csv"
-QTR_CSV   = "ecl_by_quarter.csv"
-REPORT_XLSX     = "ECL_Report.xlsx"
-VALIDATION_XLSX = "validation_report.xlsx"
+OUT_SQL   = "data/intermediate/phase1_generated.sql"
+TRI_90    = "data/intermediate/tri_90plus_amt.csv"
+TRI_TP    = "data/intermediate/tri_tpos_amt.csv"
+TRI_90_R  = "data/intermediate/tri_90plus_rate.csv"
+TRI_TP_R  = "data/intermediate/tri_tpos_rate.csv"
+MV_90     = "data/intermediate/movement_90plus.csv"
+MV_TP     = "data/intermediate/movement_tpos.csv"
+LOSS_CSV  = "data/intermediate/loss_rate.csv"
+WAVG_CSV  = "data/intermediate/weighted_loss_rate.csv"
+QTR_CSV   = "data/intermediate/ecl_by_quarter.csv"
+REPORT_XLSX     = "output/ECL_Report.xlsx"
+VALIDATION_XLSX = "output/validation_report.xlsx"
 OUT       = REPORT_XLSX         # alias used by report.py
 
 # shared helper: FY-quarter sort key   'FY16-Q1' -> (16, 1)

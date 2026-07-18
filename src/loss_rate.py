@@ -33,7 +33,7 @@ from typing import NamedTuple
 import numpy as np
 import pandas as pd
 
-from config import *      # ALL_ANCHORS, ANCHOR_MOBS, anchors_for, and (for __main__) TRI_90, TRI_TP, FEED_CSV
+from src.config import *      # ALL_ANCHORS, ANCHOR_MOBS, anchors_for, and (for __main__) TRI_90, TRI_TP, FEED_CSV
 
 
 class LossRates(NamedTuple):

@@ -46,7 +46,7 @@ from typing import NamedTuple
 import numpy as np
 import pandas as pd
 
-from config import *      # AS_OF, MOB_LIST, SEGMENT, and (for __main__) FEED_CSV
+from src.config import *      # AS_OF, MOB_LIST, SEGMENT, and (for __main__) FEED_CSV
 
 
 class Triangles(NamedTuple):

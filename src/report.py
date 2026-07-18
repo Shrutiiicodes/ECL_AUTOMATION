@@ -33,7 +33,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
-from config import *      # AS_OF, MOB_LIST, ANCHORS, ANCHOR_MOBS, anchors_for, WINDOWS, HEADLINE, fy_key, OUT
+from src.config import *      # AS_OF, MOB_LIST, ANCHORS, ANCHOR_MOBS, anchors_for, WINDOWS, HEADLINE, fy_key, OUT
 
 HF   = PatternFill("solid", fgColor="1F4E78"); HFONT = Font(bold=True, color="FFFFFF", size=10)
 IFL  = PatternFill("solid", fgColor="DDEBF7"); IFONT = Font(bold=True, size=10)

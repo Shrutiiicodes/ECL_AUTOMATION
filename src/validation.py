@@ -35,7 +35,7 @@ from typing import NamedTuple
 import numpy as np
 import pandas as pd
 
-from config import *      # DB_PATH, MOB_LIST, TOL, START_DISB, END_DISB, ANCHOR_MOBS, anchors_for, fy_key
+from src.config import *      # DB_PATH, MOB_LIST, TOL, START_DISB, END_DISB, ANCHOR_MOBS, anchors_for, fy_key
 
 
 class Check(NamedTuple):

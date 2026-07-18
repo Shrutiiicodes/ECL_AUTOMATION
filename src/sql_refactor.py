@@ -43,7 +43,7 @@ from typing import NamedTuple
 
 import pandas as pd
 
-from config import *      # DB_PATH, MOB_LIST, START_DISB, END_DISB, OUT_CSV, OUT_SQL
+from src.config import *      # DB_PATH, MOB_LIST, START_DISB, END_DISB, OUT_CSV, OUT_SQL
 
 
 class SqlOutput(NamedTuple):

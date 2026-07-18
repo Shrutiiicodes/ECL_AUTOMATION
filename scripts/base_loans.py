@@ -35,7 +35,11 @@ import pandas as pd
 from dateutil.relativedelta import relativedelta
 
 # CONFIG - all knobs live in config.py
-from config import *      # SEED, N_LOANS, START, AS_OF, MOB_LIST, SEGMENTS, SEG_DEFAULT_RATE,
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from src.config import *      # SEED, N_LOANS, START, AS_OF, MOB_LIST, SEGMENTS, SEG_DEFAULT_RATE,
                           # FREEZE_TPOS_AT_DEFAULT, DB_PATH, BASE_CSV, PERF_CSV
 
 rng = np.random.default_rng(SEED)

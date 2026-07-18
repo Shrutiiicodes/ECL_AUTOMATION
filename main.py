@@ -26,14 +26,13 @@ import subprocess
 import sys
 import time
 
-from config import DB_PATH, REPORT_XLSX, VALIDATION_XLSX, SEGMENT
-
-import sql_refactor
-import chain_ladder
-import loss_rate
-import final_ecl
-import report
-import validation
+from src.config import DB_PATH, REPORT_XLSX, VALIDATION_XLSX, SEGMENT
+from src import sql_refactor
+from src import chain_ladder
+from src import loss_rate
+from src import final_ecl
+from src import report
+from src import validation
 
 log = logging.getLogger("ecl")
 

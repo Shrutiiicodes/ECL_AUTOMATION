@@ -37,7 +37,7 @@ from typing import NamedTuple
 import numpy as np
 import pandas as pd
 
-from config import *      # AS_OF, MOB_LIST, WINDOWS, HEADLINE, fy_key
+from src.config import *      # AS_OF, MOB_LIST, WINDOWS, HEADLINE, fy_key
 
 
 class FinalECL(NamedTuple):

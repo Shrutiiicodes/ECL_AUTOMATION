@@ -27,5 +27,6 @@ Thumbs.db
 ecl.db
 *.csv
 *.xlsx
-
-reference from the meeting/
+data/
+output/
+legacy/
