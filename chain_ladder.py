@@ -223,10 +223,10 @@ if __name__ == "__main__":
     feed_raw = pd.read_csv(FEED_CSV)
     tris = run(feed_raw, SEGMENT)
 
-    tris.r90.to_csv("tri_90plus_rate.csv"); tris.a90.to_csv("tri_90plus_amt.csv")
-    tris.rtp.to_csv("tri_tpos_rate.csv");   tris.atp.to_csv("tri_tpos_amt.csv")
+    tris.r90.to_csv(TRI_90_R); tris.a90.to_csv(TRI_90)
+    tris.rtp.to_csv(TRI_TP_R);   tris.atp.to_csv(TRI_TP)
     _highlighted_xlsx(tris.r90, tris.mat90, tris.disb, "triangle_90plus_highlighted.xlsx", "Tri_90plus")
 
     _print_summary(tris)
-    print(f"\nWrote: tri_90plus_rate.csv, tri_tpos_rate.csv, tri_90plus_amt.csv,")
-    print(f"       tri_tpos_amt.csv, triangle_90plus_highlighted.xlsx")
+    print(f"\nWrote: {TRI_90_R}, {TRI_TP_R}, {TRI_90},")
+    print(f"       {TRI_TP}, triangle_90plus_highlighted.xlsx")

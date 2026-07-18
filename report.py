@@ -302,12 +302,12 @@ def build_excel(feed, tris, lrr, ecl, path=OUT):
 
 if __name__ == "__main__":
     from types import SimpleNamespace
-    feed = pd.read_csv("data_ecl.csv")
-    a90 = pd.read_csv("tri_90plus_amt.csv", index_col=0);  a90.columns = [int(c) for c in a90.columns]
-    atp = pd.read_csv("tri_tpos_amt.csv",  index_col=0);  atp.columns = [int(c) for c in atp.columns]
+    feed = pd.read_csv(FEED_CSV)
+    a90 = pd.read_csv(TRI_90, index_col=0);  a90.columns = [int(c) for c in a90.columns]
+    atp = pd.read_csv(TRI_TP,  index_col=0);  atp.columns = [int(c) for c in atp.columns]
     disb = feed.groupby("FY_QUARTER").DISBURSAL_AMT.sum().reindex(a90.index)
-    qtr  = pd.read_csv("ecl_by_quarter.csv")
-    wavg = pd.read_csv("weighted_loss_rate.csv")
+    qtr  = pd.read_csv(QTR_CSV)
+    wavg = pd.read_csv(WAVG_CSV)
     tris = SimpleNamespace(a90=a90, atp=atp, disb=disb)
     ecl  = SimpleNamespace(by_quarter=qtr, wavg=wavg)
     wb = build_excel(feed, tris, SimpleNamespace(), ecl, OUT)

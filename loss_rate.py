@@ -144,10 +144,10 @@ if __name__ == "__main__":
 
     res = run(a90, atp, feed)
 
-    res.mv90.to_csv("movement_90plus.csv")
-    res.mvtp.to_csv("movement_tpos.csv")
-    res.loss.to_csv("loss_rate.csv", index=False)
+    res.mv90.to_csv(MV_90)
+    res.mvtp.to_csv(MV_TP)
+    res.loss.to_csv(LOSS_CSV, index=False)
     _to_excel(res, "movements_loss_rate.xlsx")
 
     _print_summary(res, a90)
-    print("\nWrote: movement_90plus.csv, movement_tpos.csv, loss_rate.csv, movements_loss_rate.xlsx")
+    print(f"\nWrote: {MV_90}, {MV_TP}, {LOSS_CSV}, movements_loss_rate.xlsx")

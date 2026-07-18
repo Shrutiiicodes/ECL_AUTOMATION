@@ -163,17 +163,17 @@ def print_summary(checks) -> None:
 if __name__ == "__main__":
     from types import SimpleNamespace
 
-    feed = pd.read_csv("data_ecl.csv")
-    a90 = pd.read_csv("tri_90plus_amt.csv", index_col=0); a90.columns = [int(c) for c in a90.columns]
-    atp = pd.read_csv("tri_tpos_amt.csv",  index_col=0); atp.columns = [int(c) for c in atp.columns]
-    loss = pd.read_csv("loss_rate.csv")
-    wavg = pd.read_csv("weighted_loss_rate.csv")
+    feed = pd.read_csv(FEED_CSV)
+    a90 = pd.read_csv(TRI_90, index_col=0); a90.columns = [int(c) for c in a90.columns]
+    atp = pd.read_csv(TRI_TP,  index_col=0); atp.columns = [int(c) for c in atp.columns]
+    loss = pd.read_csv(LOSS_CSV)
+    wavg = pd.read_csv(WAVG_CSV)
 
     tris = SimpleNamespace(a90=a90, atp=atp)
     lrr  = SimpleNamespace(loss=loss)
     ecl  = SimpleNamespace(wavg=wavg)
 
     checks = validate(feed, tris, lrr, ecl, DB_PATH)
-    write_report(checks, "validation_report.xlsx")
+    write_report(checks, VALIDATION_XLSX)
     print_summary(checks)
-    print("Wrote: validation_report.xlsx")
+    print(f"Wrote: {VALIDATION_XLSX}")

@@ -173,14 +173,14 @@ def _print_summary(res: FinalECL) -> None:
 
 
 if __name__ == "__main__":
-    loss = pd.read_csv("loss_rate.csv")
-    atp  = pd.read_csv("tri_tpos_amt.csv", index_col=0); atp.columns = [int(c) for c in atp.columns]
+    loss = pd.read_csv(LOSS_CSV)
+    atp  = pd.read_csv(TRI_TP, index_col=0); atp.columns = [int(c) for c in atp.columns]
 
     res = run(loss, atp)
 
-    res.by_quarter.to_csv("ecl_by_quarter.csv", index=False)
-    res.wavg.to_csv("weighted_loss_rate.csv", index=False)
+    res.by_quarter.to_csv(QTR_CSV, index=False)
+    res.wavg.to_csv(WAVG_CSV, index=False)
     _to_excel(res, "ecl_summary.xlsx")
 
     _print_summary(res)
-    print("\nWrote: weighted_loss_rate.csv, ecl_by_quarter.csv, ecl_summary.xlsx")
+    print(f"\nWrote: {WAVG_CSV}, {QTR_CSV}, ecl_summary.xlsx")
