@@ -109,14 +109,23 @@ def write_workings_block(ws, r0, title, amt, disb, kind, pivot_top):
     """CHAIN-LADDER triangle with LIVE formulas.
        kind='rate'  -> cells are 90+/DISB (%)   ; mature = pivot/DISB
        kind='amount'-> cells are TPOS (crores)  ; mature = pivot value
-    Immature cells (yellow) carry the bank's chain-ladder formula:
-       =IFERROR( above * SUMPRODUCT(col_top:above, DISB) / SUMPRODUCT(col_top:2above, DISB), 0)
+    Immature cells (yellow) carry the anchored chain-ladder formula:
+       =IFERROR( $X$anchor * SUMPRODUCT(col_top:r-1, DISB) / SUMPRODUCT(col_top:r-2, DISB), 0)
+    where $X$anchor is the FIXED deepest-observed cell in the column, so the
+    projection does not compound down the column (fix for the deep-MOB blow-up).
     `pivot_top` = first cohort row of the matching block on Pivot_ECL.
     Returns (first_cohort_row, next_free_row)."""
     fmt = PC if kind == "rate" else CR
     tc = ws.cell(r0, 1, title); tc.font = TITF
     _hdr_row(ws, r0 + 1, "")
     top = r0 + 2
+    # per-MOB-column anchor: the row of the deepest OBSERVED cohort in that column.
+    # Projected cells multiply this FIXED cell (not the cell directly above), so the
+    # projection no longer compounds down the column.
+    anchor_row = {}
+    for j, m in enumerate(MOB_LIST):
+        mature_i = [i for i, q in enumerate(amt.index) if is_mature(q, m)]
+        anchor_row[j] = (top + mature_i[-1]) if mature_i else None
     for i, q in enumerate(amt.index):
         r = top + i
         pr = pivot_top + i                                  # matching Pivot_ECL row
@@ -131,9 +140,13 @@ def write_workings_block(ws, r0, title, amt, disb, kind, pivot_top):
                 else:
                     c.value = f"='{PIVOT}'!{X}{pr}"
             else:                                           # projected -> chain-ladder formula
+                a = anchor_row[j]                            # fixed last-actual row for this column
                 num = f"SUMPRODUCT({X}${top}:{X}{r-1},$B${top}:$B{r-1})"
                 den = f"SUMPRODUCT({X}${top}:{X}{r-2},$B${top}:$B{r-2})"
-                c.value = f"=IFERROR({X}{r-1}*{num}/{den},0)"
+                if a is None:                               # no observed cohort in this column
+                    c.value = 0
+                else:                                       # anchor on the FIXED last actual ($X$a)
+                    c.value = f"=IFERROR({X}${a}*{num}/{den},0)"
                 c.fill = YEL
             c.number_format, c.font, c.alignment, c.border = fmt, CF, C, BD
     return top, top + len(amt.index) + 1
