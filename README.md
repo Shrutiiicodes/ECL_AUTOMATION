@@ -72,8 +72,8 @@ Phase 0 is **not** part of the ECL computation — it generates synthetic data b
 | 1 | Summary | Cover metrics + headline weighted loss rate |
 | 2 | DATA_ECL | The SQL feed (FY_QUARTER × SEGMENT) |
 | 3 | Pivot_ECL | RAW pivot: 90+ amount block + TPOS amount block, observed actuals only (no projections) |
-| 4 | Workings | Chain-ladder triangles with LIVE Excel formulas: 90+ as % and TPOS as amount. Yellow = projected |
-| 5 | Final_Workings | TPOS movement amount, TPOS movement %, 90+ movement % (12…120) |
+| 4 | Chain_Ladder | Chain-ladder triangles with LIVE Excel formulas: 90+ as % and TPOS as amount. Yellow = projected |
+| 5 | Movements | TPOS movement amount, TPOS movement %, 90+ movement % (12…120) |
 | 6 | LossRate | Per-quarter loss rate at 84M and 120M (>100% flagged red) |
 | 7 | Weighted_LR | SUMPRODUCT(LR, DISB)/SUM(DISB) per observation window + final ECL |
 

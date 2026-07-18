@@ -4,7 +4,7 @@ PHASE 2 - TRIANGLE + CHAIN-LADDER ENGINE  (modelling core)
 Turns the data_ecl summary into completed run-off triangles for 90+ and
 TPOS, filling the immature (yellow) cells with the bank's exact Excel formula.
 
-Triangle layout (mirrors the Workings sheet)
+Triangle layout (mirrors the Chain Ladder sheet)
     rows    = FY_QUARTER cohorts (oldest at top)
     columns = MOB (0,3,...,120)
     cell    = rate = amount(cohort, MOB) / DISBURSAL_AMT(cohort)

@@ -13,7 +13,7 @@ Loss rate at anchor A:
   84M  -> anchors 12,24,36,48,60,72,84          (7 terms)   == the bank's =I97/SUM(B51:H51)
   120M -> anchors 12,24,...,108,120             (10 terms)
 
-Anchors are MOB LEVELS at those ages (not deltas), matching Final_Workings.
+Anchors are MOB LEVELS at those ages (not deltas), matching Movements.
 All amounts in crores. DISBURSAL_AMT is carried through because it is the WEIGHT
 used for the weighted-average loss rate in the next stage.
 
@@ -75,7 +75,7 @@ def run(tri_90_amt: pd.DataFrame, tri_tpos_amt: pd.DataFrame, feed: pd.DataFrame
 # The Excel writer is a candidate to move into report.py in the next step.
 
 def _to_excel(res: LossRates, path: str) -> None:
-    """Mirror Final_Workings: TPOS movement, 90+ movement, loss rates. Presentation only."""
+    """Mirror Movements: TPOS movement, 90+ movement, loss rates. Presentation only."""
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 

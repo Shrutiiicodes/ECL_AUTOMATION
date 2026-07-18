@@ -8,15 +8,15 @@ Sheet map (mirrors the manual workbook):
   Pivot_ECL      RAW pivot: 90+ amount block + TPOS amount block, each with a
                  Grand Total. Observed cells only; immature cells are BLANK.
                  NO yellow - this is actuals, not projections.
-  Workings       CHAIN-LADDER triangles with LIVE Excel formulas:
+  Chain_Ladder   CHAIN-LADDER triangles with LIVE Excel formulas:
                    90+  as %      (rate = 90+/DISB)
                    TPOS as amount (crores)
                  Mature cells link to Pivot_ECL; immature (yellow) cells carry
                  the bank's =IFERROR(above*SUMPRODUCT(col,DISB)/SUMPRODUCT(col,DISB),0)
                  chain-ladder formula, exactly as in the manual sheet.
-  Final_Workings movement tables (read from Workings):
+  Movements      movement tables (read from Chain_Ladder):
                    TPOS movement amount, TPOS movement %, 90+ movement %
-  LossRate       per-quarter loss rate  = 90+@A / SUM(TPOS 12..A)   (from Workings)
+  LossRate       per-quarter loss rate  = 90+@A / SUM(TPOS 12..A)   (from Chain_Ladder)
   Weighted_LR    disbursal-weighted average loss rate per window + final ECL
 
 Every computed cell is a live formula; validation.py reconciles independently.
@@ -50,7 +50,7 @@ def mob_letter(j):     return get_column_letter(mob_col(j))
 def anchor_letter(a):  return mob_letter(MOB_LIST.index(a))
 
 PIVOT = "Pivot_ECL"
-WORK  = "Workings"
+WORK  = "Chain_Ladder"
 
 
 def quarter_end(label):
@@ -205,7 +205,7 @@ def build_excel(feed, tris, lrr, ecl, path=OUT):
     ptp_top, _   = write_raw_pivot_block(ws, nxt, "TPOS (raw actuals, cr)",           atp, disb)
     ws.freeze_panes = ws.cell(3, MOB_COL0)
 
-    # -------------------------------------------------------------- Workings
+    # -------------------------------------------------------------- Chain_Ladder
     ws = wb.create_sheet(WORK); _widths(ws)
     w90_top, nxt = write_workings_block(ws, 1,   "90+% (chain ladder, rate = 90+/DISB)", a90, disb, "rate",   p90_top)
     wtp_top, _   = write_workings_block(ws, nxt, "TPOS (chain ladder, amount cr)",       atp, disb, "amount", ptp_top)
@@ -213,11 +213,11 @@ def build_excel(feed, tris, lrr, ecl, path=OUT):
     w90_row = {q: w90_top + i for i, q in enumerate(cohorts)}
     wtp_row = {q: wtp_top + i for i, q in enumerate(cohorts)}
 
-    # --------------------------------------------------------- Final_Workings
-    ws = wb.create_sheet("Final_Workings")
+    # --------------------------------------------------------- Movements
+    ws = wb.create_sheet("Movements")
     def mv_block(r0, title, prefix, kind, src_row, src_is_rate_block):
-        """kind: 'amount' (link), 'pct' (link/DISB). src_row maps cohort->Workings row.
-        src_is_rate_block True means the Workings source cells are ALREADY %."""
+        """kind: 'amount' (link), 'pct' (link/DISB). src_row maps cohort->Chain_Ladder row.
+        src_is_rate_block True means the Chain_Ladder source cells are ALREADY %."""
         fmt = CR if kind == "amount" else PC
         tc = ws.cell(r0, 1, title); tc.font = Font(bold=True, size=10)
         r0 += 1
@@ -254,7 +254,7 @@ def build_excel(feed, tris, lrr, ecl, path=OUT):
         ic = ws.cell(rr, 1, q); ic.fill, ic.font = IFL, IFONT
         ws.cell(rr, 2, f"='{WORK}'!$B{w9}").number_format = CR       # disbursal weight
         for k, A in enumerate(ANCHOR_MOBS):
-            # 90+ amount@A = (Workings 90+% @A) * DISB ; TPOS sum = Workings TPOS amounts
+            # 90+ amount@A = (Chain_Ladder 90+% @A) * DISB ; TPOS sum = Chain_Ladder TPOS amounts
             num = f"'{WORK}'!{anchor_letter(A)}{w9}*'{WORK}'!$B{w9}"
             den = "+".join(f"'{WORK}'!{anchor_letter(a)}{wt}" for a in anchors_for(A))
             cc = ws.cell(rr, 3 + k, f"=IFERROR(({num})/({den}),0)"); cc.number_format = PC
