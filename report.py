@@ -104,8 +104,8 @@ def write_raw_pivot_block(ws, r0, title, amt, disb):
     return top, gr + 2
 
 
-# ------------------------------------------------------------------ Workings
-def write_workings_block(ws, r0, title, amt, disb, kind, pivot_top):
+# ------------------------------------------------------------------ Chain_Ladder
+def write_chain_ladder_block(ws, r0, title, amt, disb, kind, pivot_top):
     """CHAIN-LADDER triangle with LIVE formulas.
        kind='rate'  -> cells are 90+/DISB (%)   ; mature = pivot/DISB
        kind='amount'-> cells are TPOS (crores)  ; mature = pivot value
@@ -207,8 +207,8 @@ def build_excel(feed, tris, lrr, ecl, path=OUT):
 
     # -------------------------------------------------------------- Chain_Ladder
     ws = wb.create_sheet(WORK); _widths(ws)
-    w90_top, nxt = write_workings_block(ws, 1,   "90+% (chain ladder, rate = 90+/DISB)", a90, disb, "rate",   p90_top)
-    wtp_top, _   = write_workings_block(ws, nxt, "TPOS (chain ladder, amount cr)",       atp, disb, "amount", ptp_top)
+    w90_top, nxt = write_chain_ladder_block(ws, 1,   "90+% (chain ladder, rate = 90+/DISB)", a90, disb, "rate",   p90_top)
+    wtp_top, _   = write_chain_ladder_block(ws, nxt, "TPOS (chain ladder, amount cr)",       atp, disb, "amount", ptp_top)
     ws.freeze_panes = ws.cell(3, MOB_COL0)
     w90_row = {q: w90_top + i for i, q in enumerate(cohorts)}
     wtp_row = {q: wtp_top + i for i, q in enumerate(cohorts)}
