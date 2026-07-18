@@ -91,60 +91,7 @@ def run(loss: pd.DataFrame, atp: pd.DataFrame) -> FinalECL:
                     ecl_pct=ecl_pct)
 
 
-# Standalone entrypoint: disk I/O + presentation-only Excel.
-# None of this runs on import. `python final_ecl.py` writes the same outputs.
-# The Excel writer is a candidate to move into report.py in a later step.
-def _to_excel(res: FinalECL, path: str) -> None:
-    from openpyxl import Workbook
-    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
-    wavg_df, loss = res.wavg, res.by_quarter
-    portfolio_tpos = res.portfolio_tpos
-
-    HF = PatternFill("solid", fgColor="1F4E78"); HFONT = Font(bold=True, color="FFFFFF")
-    IFL = PatternFill("solid", fgColor="DDEBF7"); TOT = PatternFill("solid", fgColor="C6E0B4")
-    WARN = PatternFill("solid", fgColor="FFC7CE")
-    C = Alignment("center", "center"); BD = Border(*[Side(style="thin", color="D9D9D9")] * 4)
-    CR, PC = "#,##0.0000", "0.00%"
-
-    wb = Workbook(); ws = wb.active; ws.title = "Weighted_LossRate"
-    heads = ["WINDOW", "FY_START", "FY_END", "ANCHOR", "N_QTRS", "TOTAL_DISB", "SIMPLE_AVG", "WEIGHTED_AVG"]
-    for j, h in enumerate(heads, 1):
-        c = ws.cell(1, j, h); c.fill, c.font, c.alignment, c.border = HF, HFONT, C, BD
-    for i, r in wavg_df.iterrows():
-        rr = 2 + i
-        ws.cell(rr, 1, r.WINDOW); ws.cell(rr, 2, r.FY_START); ws.cell(rr, 3, r.FY_END)
-        ws.cell(rr, 4, int(r.ANCHOR_MOB)); ws.cell(rr, 5, int(r.N_QUARTERS))
-        ws.cell(rr, 6, round(r.TOTAL_DISB, 4)).number_format = CR
-        ws.cell(rr, 7, round(r.SIMPLE_AVG_LR, 6)).number_format = PC
-        wc = ws.cell(rr, 8, round(r.WEIGHTED_AVG_LR, 6)); wc.number_format = PC; wc.font = Font(bold=True)
-        if r.WEIGHTED_AVG_LR > 1: wc.fill = WARN            # implausible -> flag
-        for cc in range(1, 9): ws.cell(rr, cc).alignment = C; ws.cell(rr, cc).border = BD
-    r0 = 3 + len(wavg_df)
-    ws.cell(r0, 1, "Headline window").font = Font(bold=True); ws.cell(r0, 2, HEADLINE)
-    ws.cell(r0 + 1, 1, "Portfolio current TPOS (cr)").font = Font(bold=True)
-    ws.cell(r0 + 1, 2, round(portfolio_tpos, 4)).number_format = CR
-    for col, w in zip("ABCDEFGH", [20, 10, 10, 9, 9, 14, 13, 14]):
-        ws.column_dimensions[col].width = w
-
-    # per-quarter detail
-    ws2 = wb.create_sheet("Per_Quarter")
-    heads2 = ["FY_QUARTER", "DISB_AMT", "LOSS_RATE_84M", "LOSS_RATE_120M", "CURRENT_MOB", "CURRENT_TPOS"]
-    for j, h in enumerate(heads2, 1):
-        c = ws2.cell(1, j, h); c.fill, c.font, c.alignment, c.border = HF, HFONT, C, BD
-    for i, r in loss.iterrows():
-        rr = 2 + i
-        ws2.cell(rr, 1, r.FY_QUARTER).fill = IFL
-        ws2.cell(rr, 2, round(r.DISBURSAL_AMT, 4)).number_format = CR
-        c84 = ws2.cell(rr, 3, round(r.LOSS_RATE_84M, 6)); c84.number_format = PC
-        c120 = ws2.cell(rr, 4, round(r.LOSS_RATE_120M, 6)); c120.number_format = PC
-        if r.LOSS_RATE_120M > 1: c120.fill = WARN
-        ws2.cell(rr, 5, int(r.CURRENT_MOB))
-        ws2.cell(rr, 6, round(r.CURRENT_TPOS, 6)).number_format = CR
-        for cc in range(1, 7): ws2.cell(rr, cc).alignment = C; ws2.cell(rr, cc).border = BD
-    ws2.column_dimensions["A"].width = 12
-    for col in "BCDEF": ws2.column_dimensions[col].width = 15
-    wb.save(path)
 
 
 def _print_summary(res: FinalECL) -> None:
@@ -180,7 +127,5 @@ if __name__ == "__main__":
 
     res.by_quarter.to_csv(QTR_CSV, index=False)
     res.wavg.to_csv(WAVG_CSV, index=False)
-    _to_excel(res, "ecl_summary.xlsx")
-
     _print_summary(res)
-    print(f"\nWrote: {WAVG_CSV}, {QTR_CSV}, ecl_summary.xlsx")
+    print(f"\nWrote: {WAVG_CSV}, {QTR_CSV}")

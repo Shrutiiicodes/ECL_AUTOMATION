@@ -70,54 +70,7 @@ def run(tri_90_amt: pd.DataFrame, tri_tpos_amt: pd.DataFrame, feed: pd.DataFrame
     return LossRates(loss=loss, mv90=mv90, mvtp=mvtp)
 
 
-# Standalone entrypoint: disk I/O + the presentation-only Excel writer.
-# None of this runs on import. It exists so `python loss_rate.py` still works.
-# The Excel writer is a candidate to move into report.py in the next step.
 
-def _to_excel(res: LossRates, path: str) -> None:
-    """Mirror Movements: TPOS movement, 90+ movement, loss rates. Presentation only."""
-    from openpyxl import Workbook
-    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-
-    HF = PatternFill("solid", fgColor="1F4E78"); HFONT = Font(bold=True, color="FFFFFF")
-    IFL = PatternFill("solid", fgColor="DDEBF7"); IFONT = Font(bold=True, size=10)
-    C = Alignment("center", "center")
-    BD = Border(*[Side(style="thin", color="D9D9D9")] * 4)
-    CR, PC = "#,##0.0000", "0.00%"
-
-    loss, mv90, mvtp = res.loss, res.mv90, res.mvtp
-    wb = Workbook(); ws = wb.active; ws.title = "Movements_LossRate"
-
-    def block(ws, r0, prefix, frame):
-        for j, h in enumerate(["FY_QUARTER"] + [f"{prefix}{m}MOB" for m in ALL_ANCHORS], 1):
-            c = ws.cell(r0, j, h); c.fill, c.font, c.alignment, c.border = HF, HFONT, C, BD
-        for i, q in enumerate(frame.index):
-            rr = r0 + 1 + i
-            ic = ws.cell(rr, 1, q); ic.fill, ic.font, ic.border = IFL, IFONT, BD
-            for j, m in enumerate(ALL_ANCHORS):
-                c = ws.cell(rr, 2 + j, round(float(frame.loc[q, m]), 6))
-                c.number_format, c.alignment, c.border = CR, C, BD
-        return r0 + 1 + len(frame)
-
-    end = block(ws, 1, "TPOS_", mvtp)
-    end = block(ws, end + 2, "90PLUS_", mv90)
-
-    r0 = end + 2
-    heads = ["FY_QUARTER", "DISB_AMT (weight)"] + [f"LOSS_RATE_{A}M" for A in ANCHOR_MOBS]
-    for j, h in enumerate(heads, 1):
-        c = ws.cell(r0, j, h); c.fill, c.font, c.alignment, c.border = HF, HFONT, C, BD
-    for i, row in loss.iterrows():
-        rr = r0 + 1 + i
-        ic = ws.cell(rr, 1, row.FY_QUARTER); ic.fill, ic.font, ic.border = IFL, IFONT, BD
-        dc = ws.cell(rr, 2, round(row.DISBURSAL_AMT, 4)); dc.number_format = CR
-        for k, A in enumerate(ANCHOR_MOBS):
-            c = ws.cell(rr, 3 + k, round(row[f"LOSS_RATE_{A}M"], 6)); c.number_format = PC
-        for cc in range(2, 3 + len(ANCHOR_MOBS)):
-            ws.cell(rr, cc).alignment = C; ws.cell(rr, cc).border = BD
-    ws.column_dimensions["A"].width = 12
-    for col in "BCD":
-        ws.column_dimensions[col].width = 17
-    wb.save(path)
 
 
 def _print_summary(res: LossRates, tri_90_amt: pd.DataFrame) -> None:
@@ -147,7 +100,5 @@ if __name__ == "__main__":
     res.mv90.to_csv(MV_90)
     res.mvtp.to_csv(MV_TP)
     res.loss.to_csv(LOSS_CSV, index=False)
-    _to_excel(res, "movements_loss_rate.xlsx")
-
     _print_summary(res, a90)
-    print(f"\nWrote: {MV_90}, {MV_TP}, {LOSS_CSV}, movements_loss_rate.xlsx")
+    print(f"\nWrote: {MV_90}, {MV_TP}, {LOSS_CSV}")
