@@ -14,16 +14,21 @@ Maturity (replaces manual yellow-highlighting)
     had j months to develop: months_between(quarter_end, AS_OF) >= j.
     Cells beyond that are immature and get projected.
 
-Chain-ladder fill (exact reproduction of the Excel formula, on AMOUNT cells)
-    For an immature AMOUNT cell at (row R, MOB X):
-        amt(R,X) = amt(R-1,X)
+Chain-ladder fill (anchored on the last actual value in each MOB column)
+    For an immature cell at (row R, MOB X):
+        val(R,X) = LAST_ACTUAL(X)
                    * SUMPRODUCT(X[top..R-1], DISB[top..R-1])
                    / SUMPRODUCT(X[top..R-2], DISB[top..R-2])
-    i.e. carry the cohort above down the SAME MOB column, scaled by the
-    disbursal-weighted cumulative ratio. The formula runs on the amount pivot
-    cells (90+ / TPOS in crores), then rate = amount / disbursal is derived.
-    IFERROR -> 0 when the denominator is 0. Cells fill top-to-bottom so each
-    projection feeds the next (as dragging the formula down a column does).
+    where LAST_ACTUAL(X) is the deepest OBSERVED cell in column X (the last
+    non-projected cohort). The leading term is FIXED to that observed anchor
+    rather than to the cell directly above, so the projection does NOT compound
+    down the column. This is the fix for the deep-MOB explosion: the previous
+    build multiplied each projected cell by a factor > 1 off the cell above,
+    so a column needing many projection steps (e.g. 120M for young cohorts)
+    ran to impossible values (>100% cumulative default). Anchoring on the last
+    actual applies a single bounded ratio to a fixed base instead.
+    Runs identically on the 90+ (rate) and TPOS (amount) triangles.
+    IFERROR -> 0 when the denominator is 0 or no observed anchor exists.
 
 This module exposes a PURE function:
 
@@ -85,36 +90,39 @@ def max_mature_mob(label, as_of):
     return max(valid) if valid else -1
 
 
-# CHAIN-LADDER FILL  (exact reproduction of the bank's Excel formula, down each column)
+# CHAIN-LADDER FILL  (anchored on the last actual value in each MOB column)
 def chain_ladder_fill(tri, disb, mature):
-    """DOWN-COLUMN vertical fill — the bank's Excel chain-ladder formula:
+    """DOWN-COLUMN fill anchored on the last OBSERVED cell in each MOB column:
 
-        value(ri,cj) = value(ri-1, cj)
+        anchor_cj    = value at the deepest observed (mature) row of column cj
+        value(ri,cj) = anchor_cj
                        * SUMPRODUCT(col_cj[top..ri-1], disb[top..ri-1])
                        / SUMPRODUCT(col_cj[top..ri-2], disb[top..ri-2])
 
-    i.e. carry the cohort ABOVE down the SAME MOB column, scaled by the
-    disbursal-weighted cumulative ratio. Cells fill top-to-bottom within each
-    column so every projected cell feeds the cumulative sums below it, exactly
-    as dragging  =IFERROR(C45*SUMPRODUCT(C$4:C45,$B$4:B45)
-    /SUMPRODUCT(C$4:C44,$B$4:$B44),0)  down the column does in Excel.
-    The formula runs on the AMOUNT pivot cells (not rates). IFERROR -> 0 when
-    the denominator is 0 or there is no cohort above to anchor on."""
+    The leading term is FIXED to the last actual value, not to the cell directly
+    above, so projections do NOT compound down the column. This reproduces the
+    corrected Excel form  =IFERROR($F$43*SUMPRODUCT(F$3:F45,$B$3:$B45)
+    /SUMPRODUCT(F$3:F44,$B$3:$B44),0)  where F43 is the last observed cohort and
+    stays fixed as the formula is dragged down. Cells still fill top-to-bottom so
+    the cumulative ratio uses the filled column, but the base no longer chains.
+    Runs on rate cells (90+) or amount cells (TPOS) identically. IFERROR -> 0
+    when the denominator is 0 or the column has no observed anchor."""
     R = tri.to_numpy(dtype=float).copy()
     M = mature.to_numpy()
     w = disb.to_numpy(dtype=float)
     n_rows, n_cols = R.shape
     for cj in range(n_cols):
+        mature_rows = np.where(M[:, cj])[0]                  # observed rows in this column
+        anchor = R[mature_rows[-1], cj] if mature_rows.size else 0.0  # last actual = fixed base
         for ri in range(n_rows):
             if M[ri, cj]:
                 continue
             if ri == 0:
-                R[ri, cj] = 0.0                          # no cohort above
+                R[ri, cj] = 0.0                              # no observed cohort above
                 continue
-            above = R[ri - 1, cj]                        # cell directly above (same MOB)
-            num = np.nansum(R[:ri,     cj] * w[:ri])     # rows top..ri-1 (incl. above)
-            den = np.nansum(R[:ri - 1, cj] * w[:ri - 1]) # rows top..ri-2
-            R[ri, cj] = above * num / den if den != 0 else 0.0
+            num = np.nansum(R[:ri,     cj] * w[:ri])         # rows top..ri-1
+            den = np.nansum(R[:ri - 1, cj] * w[:ri - 1])     # rows top..ri-2
+            R[ri, cj] = anchor * num / den if den != 0 else 0.0
     return pd.DataFrame(R, index=tri.index, columns=tri.columns)
 
 # BUILD ONE METRIC'S TRIANGLE
@@ -191,14 +199,18 @@ def _print_summary(tris: Triangles) -> None:
 
     # worked example: recompute one projected AMOUNT cell by hand and compare to engine
     a90 = tris.a90                                                        # amounts (what the formula runs on)
-    ri = next(i for i in range(len(labels)) if not mat90.iloc[i].all())   # first immature cohort
-    cj = next(j for j in range(len(MOB_LIST)) if not mat90.iloc[ri, j])   # its first immature MOB
+    # pick a cohort with >1 projected cell in a column so the anchor differs from the cell above
+    cj = next(j for j in range(len(MOB_LIST)) if (~mat90.iloc[:, j]).sum() >= 2)
+    proj_rows = [i for i in range(len(labels)) if not mat90.iloc[i, cj]]
+    ri = proj_rows[-1]                                                     # deepest projected row (anchor != above)
     w  = disb.to_numpy()
+    anchor_row = np.where(mat90.iloc[:, cj].to_numpy())[0]
+    anchor = a90.iloc[anchor_row[-1], cj] if anchor_row.size else 0.0      # fixed last-actual base
     num = np.nansum(a90.iloc[:ri,   cj].to_numpy() * w[:ri])
     den = np.nansum(a90.iloc[:ri-1, cj].to_numpy() * w[:ri-1])
-    hand = a90.iloc[ri-1, cj] * num / den if den else 0.0
+    hand = anchor * num / den if den else 0.0
     print(f"\nworked example (amount)  cell [{labels[ri]}, {MOB_LIST[cj]}MOB]:")
-    print(f"    above={a90.iloc[ri-1,cj]:.6f}  factor={num/den if den else 0:.6f}")
+    print(f"    anchor(last actual)={anchor:.6f}  factor={num/den if den else 0:.6f}")
     print(f"    hand={hand:.8f}   engine={a90.iloc[ri,cj]:.8f}   match={np.isclose(hand, a90.iloc[ri,cj])}")
 
     # sanity: no NaN left, 90+ rate non-decreasing across MOB (cumulative defaults)
