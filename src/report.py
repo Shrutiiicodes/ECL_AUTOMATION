@@ -109,10 +109,12 @@ def write_chain_ladder_block(ws, r0, title, amt, disb, kind, pivot_top):
     """CHAIN-LADDER triangle with LIVE formulas.
        kind='rate'  -> cells are 90+/DISB (%)   ; mature = pivot/DISB
        kind='amount'-> cells are TPOS (crores)  ; mature = pivot value
-    Immature cells (yellow) carry the anchored chain-ladder formula:
-       =IFERROR( $X$anchor * SUMPRODUCT(col_top:r-1, DISB) / SUMPRODUCT(col_top:r-2, DISB), 0)
-    where $X$anchor is the FIXED deepest-observed cell in the column, so the
-    projection does not compound down the column (fix for the deep-MOB blow-up).
+    Immature cells (yellow) carry the bank's chain-ladder development-factor formula:
+       =IFERROR( F{r} * SUMPRODUCT(G$top:G{r-1}, DISB) / SUMPRODUCT(F$top:F{r-1}, DISB), 0)
+    where G is this MOB column, F is the PREVIOUS MOB column, and F{r} is the same
+    cohort's previous-MOB cell. The factor is the disbursal-weighted development
+    ratio from the previous MOB to this MOB over the cohorts above. Matches the
+    numpy engine in chain_ladder.chain_ladder_fill cell-for-cell.
     `pivot_top` = first cohort row of the matching block on Pivot_ECL.
     Returns (first_cohort_row, next_free_row)."""
     fmt = PC if kind == "rate" else CR
@@ -165,7 +167,7 @@ def build_excel(feed, tris, lrr, ecl, path=OUT):
         ("As-of date", str(AS_OF), None),
         ("Cohorts (FY quarters)", n, None),
         ("MOB grid", f"3..120 step 3  ({len(MOB_LIST)} pivot points; 0MOB extracted, not pivoted)", None),
-        ("Loss-rate anchors", "84M and 120M", None),
+        ("Loss-rate anchors", ", ".join(f"{A}M" for A in ANCHOR_MOBS), None),
         ("Headline window", HEADLINE, None),
         ("Weighted-avg loss rate", f"='Weighted_LR'!H{headline_row}", PC),
         ("Window total disbursal (cr)", f"='Weighted_LR'!B{tpos_row}", CR),
@@ -237,8 +239,12 @@ def build_excel(feed, tris, lrr, ecl, path=OUT):
 
     # -------------------------------------------------------------- LossRate
     ws = wb.create_sheet("LossRate")
-    for j, h in enumerate(["FY_QUARTER", "DISB_AMT (weight)", "LOSS_RATE_84M", "LOSS_RATE_120M",
-                           "CURRENT_MOB", "CURRENT_TPOS"], 1):
+    lr_heads = (["FY_QUARTER", "DISB_AMT (weight)"]
+                + [f"LOSS_RATE_{A}M" for A in ANCHOR_MOBS]
+                + ["CURRENT_MOB", "CURRENT_TPOS"])
+    col_mob = 3 + len(ANCHOR_MOBS)          # CURRENT_MOB column (anchors occupy cols 3..)
+    col_tp  = col_mob + 1                   # CURRENT_TPOS column
+    for j, h in enumerate(lr_heads, 1):
         c = ws.cell(1, j, h); c.fill, c.font, c.alignment, c.border = HF, HFONT, C, BD
     lr_row = {}
     for i, rowq in qtr.iterrows():
@@ -252,19 +258,20 @@ def build_excel(feed, tris, lrr, ecl, path=OUT):
             den = "+".join(f"'{WORK}'!{anchor_letter(a)}{wt}" for a in anchors_for(A))
             cc = ws.cell(rr, 3 + k, f"=IFERROR(({num})/({den}),0)"); cc.number_format = PC
             if rowq[f"LOSS_RATE_{A}M"] > 1: cc.fill = WARN
-        ws.cell(rr, 5, int(rowq.CURRENT_MOB))
+        ws.cell(rr, col_mob, int(rowq.CURRENT_MOB))
         cm = anchor_letter(int(rowq.CURRENT_MOB)) if int(rowq.CURRENT_MOB) in MOB_LIST else mob_letter(0)
-        ws.cell(rr, 6, f"='{WORK}'!{cm}{wt}").number_format = CR
-        for cc in range(1, 7): ws.cell(rr, cc).alignment = C; ws.cell(rr, cc).border = BD
+        ws.cell(rr, col_tp, f"='{WORK}'!{cm}{wt}").number_format = CR
+        for cc in range(1, col_tp + 1): ws.cell(rr, cc).alignment = C; ws.cell(rr, cc).border = BD
     ws.column_dimensions["A"].width = 12
-    for col in "BCDEF": ws.column_dimensions[col].width = 16
+    for j in range(2, col_tp + 1): ws.column_dimensions[get_column_letter(j)].width = 16
 
     # ------------------------------------------------------------ Weighted_LR
     ws = wb.create_sheet("Weighted_LR")
     heads = ["WINDOW", "FY_START", "FY_END", "ANCHOR", "N_QTRS", "TOTAL_DISB", "SIMPLE_AVG", "WEIGHTED_AVG"]
     for j, h in enumerate(heads, 1):
         c = ws.cell(1, j, h); c.fill, c.font, c.alignment, c.border = HF, HFONT, C, BD
-    lr_col = {84: "C", 120: "D"}
+    # anchors occupy LossRate columns C, D, E, ... in ANCHOR_MOBS order
+    lr_col = {A: get_column_letter(3 + p) for p, A in enumerate(ANCHOR_MOBS)}
     for i, r in wavg.iterrows():
         rr = 2 + i
         k1, k2 = fy_key(r.FY_START), fy_key(r.FY_END)

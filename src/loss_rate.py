@@ -1,6 +1,6 @@
 """
-MOVEMENT TABLES + LOSS RATES  (84M and 120M anchors)
-====================================================
+MOVEMENT TABLES + LOSS RATES  (anchors driven by config.ANCHOR_MOBS)
+=========================================================
 Consumes the completed amount triangles and produces, per FY_QUARTER:
 
   movement_tpos    : TPOS at the anchor MOBs

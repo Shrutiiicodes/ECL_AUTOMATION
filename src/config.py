@@ -29,7 +29,7 @@ MOB_SQL  = list(range(0, 121, 3))
 MOB_LIST = list(range(3, 121, 3))
 
 # loss-rate anchors.  LR_A = 90+ @ A / SUM(TPOS 12,24,...,A)
-ANCHOR_MOBS = [84, 120]
+ANCHOR_MOBS = [72, 84, 120]
 anchors_for = lambda a: list(range(12, a + 1, 12))
 ALL_ANCHORS = anchors_for(max(ANCHOR_MOBS))     # 12..120, used by movement tables
 ANCHORS     = ALL_ANCHORS                       # alias used by report.py

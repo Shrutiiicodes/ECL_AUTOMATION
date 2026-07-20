@@ -63,16 +63,15 @@ def validate(feed, tris, lrr, ecl, db_path=DB_PATH) -> list:
     base["FY_QUARTER"] = base.disbursal_date.map(fy_q)
     bad = perf.pivot_table(index="distinct_loan_no", columns="mob", values="amt_90plus_settlement", aggfunc="sum")
     tps = perf.pivot_table(index="distinct_loan_no", columns="mob", values="tpos", aggfunc="sum")
-    m = base.set_index("distinct_loan_no")[["FY_QUARTER", "segment", "disbursal_amount"]]
-    g = m.join(bad.add_prefix("bad_")).join(tps.add_prefix("tps_")).groupby(["FY_QUARTER", "segment"])
+    m = base.set_index("distinct_loan_no")[["FY_QUARTER", "disbursal_amount"]]
+    g = m.join(bad.add_prefix("bad_")).join(tps.add_prefix("tps_")).groupby("FY_QUARTER")
     exp = pd.DataFrame({"LAN_CNT": g.size(), "DISBURSAL_AMT": g.disbursal_amount.sum() / 1e7})
     for mob in MOB_SQL:
         exp[f"AMT_90PLUS_SETTLEMENT_{mob}MOB"] = g[f"bad_{mob}"].sum() / 1e7
         exp[f"TPOS_{mob}MOB"]                  = g[f"tps_{mob}"].sum() / 1e7
 
     # pipeline output to diff against (passed in, not read from CSV)
-    feed_idx = feed.set_index(["FY_QUARTER", "SEGMENT"]).copy()
-    feed_idx.index = feed_idx.index.set_names(["FY_QUARTER", "segment"])
+    feed_idx = feed.set_index("FY_QUARTER").copy()
     exp = exp.reindex(feed_idx.index)
 
     checks = []

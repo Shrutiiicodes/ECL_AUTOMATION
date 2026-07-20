@@ -93,15 +93,14 @@ base_fy AS (                 -- filter window + derive FY quarter in SQL
 )
 SELECT
     b.fy_quarter                       AS FY_QUARTER,
-    b.segment                          AS SEGMENT,
     COUNT(*)                           AS LAN_CNT,
     ROUND(SUM(b.disbursal_amount)/1e7, 6) AS DISBURSAL_AMT,
 {sel_bad},
 {sel_tpos}
 FROM base_fy b
 LEFT JOIN perf_wide pw ON b.distinct_loan_no = pw.distinct_loan_no
-GROUP BY b.fy_quarter, b.segment
-ORDER BY {FY_SORT_SQL}, b.segment;
+GROUP BY b.fy_quarter
+ORDER BY {FY_SORT_SQL};
 """.strip()
 
 
@@ -136,12 +135,12 @@ def _reconcile(feed: pd.DataFrame, db_path=DB_PATH) -> None:
     bad12 = (perf[perf.mob == 12].groupby("distinct_loan_no").amt_90plus_settlement.sum()
              .rename("bad12"))                                  # spot-check one MOB
     merged = base.set_index("distinct_loan_no").join(bad12)
-    g = merged.groupby(["fy_quarter", "segment"])
+    g = merged.groupby("fy_quarter")
     exp_cnt  = g.size()
     exp_disb = g["disbursal_amount"].sum() / 1e7
     exp_bad0 = g["bad12"].sum() / 1e7
 
-    sql_idx = feed.set_index(["FY_QUARTER", "SEGMENT"])
+    sql_idx = feed.set_index("FY_QUARTER")
     print("=" * 60)
     print("PHASE 1 COMPLETE  -  reconciliation vs independent pandas")
     print("=" * 60)
