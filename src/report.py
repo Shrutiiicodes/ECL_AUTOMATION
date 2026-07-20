@@ -119,13 +119,6 @@ def write_chain_ladder_block(ws, r0, title, amt, disb, kind, pivot_top):
     tc = ws.cell(r0, 1, title); tc.font = TITF
     _hdr_row(ws, r0 + 1, "")
     top = r0 + 2
-    # per-MOB-column anchor: the row of the deepest OBSERVED cohort in that column.
-    # Projected cells multiply this FIXED cell (not the cell directly above), so the
-    # projection no longer compounds down the column.
-    anchor_row = {}
-    for j, m in enumerate(MOB_LIST):
-        mature_i = [i for i, q in enumerate(amt.index) if is_mature(q, m)]
-        anchor_row[j] = (top + mature_i[-1]) if mature_i else None
     for i, q in enumerate(amt.index):
         r = top + i
         pr = pivot_top + i                                  # matching Pivot_ECL row
@@ -139,14 +132,14 @@ def write_chain_ladder_block(ws, r0, title, amt, disb, kind, pivot_top):
                     c.value = f"=IFERROR('{PIVOT}'!{X}{pr}/'{PIVOT}'!$B{pr},0)"
                 else:
                     c.value = f"='{PIVOT}'!{X}{pr}"
-            else:                                           # projected -> chain-ladder formula
-                a = anchor_row[j]                            # fixed last-actual row for this column
-                num = f"SUMPRODUCT({X}${top}:{X}{r-1},$B${top}:$B{r-1})"
-                den = f"SUMPRODUCT({X}${top}:{X}{r-2},$B${top}:$B{r-2})"
-                if a is None:                               # no observed cohort in this column
+            else:                                           # projected -> chain-ladder dev factor
+                if j == 0:                                  # first MOB, no previous column -> 0
                     c.value = 0
-                else:                                       # anchor on the FIXED last actual ($X$a)
-                    c.value = f"=IFERROR({X}${a}*{num}/{den},0)"
+                else:                                       # G46 = F46 * SUMPRODUCT(G..)/SUMPRODUCT(F..)
+                    Xp  = mob_letter(j - 1)                 # previous MOB column (F)
+                    num = f"SUMPRODUCT({X}${top}:{X}{r-1},$B${top}:$B{r-1})"
+                    den = f"SUMPRODUCT({Xp}${top}:{Xp}{r-1},$B${top}:$B{r-1})"
+                    c.value = f"=IFERROR({Xp}{r}*{num}/{den},0)"
                 c.fill = YEL
             c.number_format, c.font, c.alignment, c.border = fmt, CF, C, BD
     return top, top + len(amt.index) + 1

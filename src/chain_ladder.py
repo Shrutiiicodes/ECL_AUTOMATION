@@ -89,40 +89,26 @@ def max_mature_mob(label, as_of):
     valid = [m for m in MOB_LIST if m <= months]
     return max(valid) if valid else -1
 
-
-# CHAIN-LADDER FILL  (anchored on the last actual value in each MOB column)
 def chain_ladder_fill(tri, disb, mature):
-    """DOWN-COLUMN fill anchored on the last OBSERVED cell in each MOB column:
-
-        anchor_cj    = value at the deepest observed (mature) row of column cj
-        value(ri,cj) = anchor_cj
-                       * SUMPRODUCT(col_cj[top..ri-1], disb[top..ri-1])
-                       / SUMPRODUCT(col_cj[top..ri-2], disb[top..ri-2])
-
-    The leading term is FIXED to the last actual value, not to the cell directly
-    above, so projections do NOT compound down the column. This reproduces the
-    corrected Excel form  =IFERROR($F$43*SUMPRODUCT(F$3:F45,$B$3:$B45)
-    /SUMPRODUCT(F$3:F44,$B$3:$B44),0)  where F43 is the last observed cohort and
-    stays fixed as the formula is dragged down. Cells still fill top-to-bottom so
-    the cumulative ratio uses the filled column, but the base no longer chains.
-    Runs on rate cells (90+) or amount cells (TPOS) identically. IFERROR -> 0
-    when the denominator is 0 or the column has no observed anchor."""
+    """G46 = IFERROR(F46*SUMPRODUCT(G$4:G45,$B$4:$B45)/SUMPRODUCT(F$4:F45,$B$4:$B45),0)
+    Base = same cohort's previous-MOB value (F46); factor = disbursal-weighted
+    development ratio from previous MOB (cj-1) to this MOB (cj) over the rows above."""
     R = tri.to_numpy(dtype=float).copy()
     M = mature.to_numpy()
     w = disb.to_numpy(dtype=float)
     n_rows, n_cols = R.shape
-    for cj in range(n_cols):
-        mature_rows = np.where(M[:, cj])[0]                  # observed rows in this column
-        anchor = R[mature_rows[-1], cj] if mature_rows.size else 0.0  # last actual = fixed base
-        for ri in range(n_rows):
+    for cj in range(n_cols):                         # left->right: prev MOB column done first
+        for ri in range(n_rows):                     # top->bottom: rows above done first
             if M[ri, cj]:
+                continue                             # observed cell, keep as-is
+            if cj == 0 or ri == 0:
+                R[ri, cj] = 0.0                      # no previous MOB / no rows above
                 continue
-            if ri == 0:
-                R[ri, cj] = 0.0                              # no observed cohort above
-                continue
-            num = np.nansum(R[:ri,     cj] * w[:ri])         # rows top..ri-1
-            den = np.nansum(R[:ri - 1, cj] * w[:ri - 1])     # rows top..ri-2
-            R[ri, cj] = anchor * num / den if den != 0 else 0.0
+            wa   = w[:ri]                             # $B$top:$B{ri-1}
+            num  = np.nansum(R[:ri, cj]     * wa)     # SUMPRODUCT(G$top:G{ri-1}, B)
+            den  = np.nansum(R[:ri, cj - 1] * wa)     # SUMPRODUCT(F$top:F{ri-1}, B)
+            base = R[ri, cj - 1]                      # F46 = same cohort, previous MOB
+            R[ri, cj] = base * num / den if den != 0 else 0.0
     return pd.DataFrame(R, index=tri.index, columns=tri.columns)
 
 # BUILD ONE METRIC'S TRIANGLE
