@@ -33,6 +33,7 @@ from src import loss_rate
 from src import final_ecl
 from src import report
 from src import validation
+from src import excel_validation
 
 log = logging.getLogger("ecl")
 
@@ -62,7 +63,7 @@ def ensure_database():
         log.info("database %s present - skipping synthetic-data setup", DB_PATH)
         return
     log.info("Running Phase 0  synthetic data setup (base_loans.py) ...")
-    r = subprocess.run([sys.executable, "base_loans.py"], capture_output=True, text=True)
+    r = subprocess.run([sys.executable, "-m", "scripts.base_loans"], capture_output=True, text=True)
     if r.returncode != 0:
         log.error("Phase 0 FAILED:\n%s", r.stderr[-1500:])
         sys.exit(1)
@@ -96,6 +97,9 @@ def main():
         with step("Phase 6  validation"):
             checks = validation.validate(out.feed, tris, lrr, ecl, DB_PATH)
             validation.write_report(checks, VALIDATION_XLSX)
+        with step("Phase 7  excel-layer validation"):
+            xl_status = excel_validation.run_excel_validation(ecl.ecl_pct, REPORT_XLSX)
+
     except Exception as exc:
         log.error("PIPELINE ABORTED: %s", exc)
         sys.exit(1)
@@ -114,7 +118,7 @@ def main():
     # full check table
     validation.print_summary(checks)
 
-    if status == "FAIL":
+    if status == "FAIL" or xl_status == "FAIL":
         log.error("validation reported FAIL - do not ship this run")
         sys.exit(1)
 

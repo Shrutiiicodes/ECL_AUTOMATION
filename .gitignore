@@ -29,4 +29,4 @@ ecl.db
 *.xlsx
 data/
 output/
-legacy/
+reference docs/
