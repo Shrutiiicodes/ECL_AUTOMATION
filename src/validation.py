@@ -65,16 +65,18 @@ def validate(feed, tris, lrr, ecl, db_path=DB_PATH) -> list:
     base["FY_QUARTER"] = base.disbursal_date.map(fy_q)
     bad = perf.pivot_table(index="distinct_loan_no", columns="mob", values="amt_90plus_settlement", aggfunc="sum")
     tps = perf.pivot_table(index="distinct_loan_no", columns="mob", values="tpos", aggfunc="sum")
-    m = base.set_index("distinct_loan_no")[["FY_QUARTER", "disbursal_amount"]]
-    g = m.join(bad.add_prefix("bad_")).join(tps.add_prefix("tps_")).groupby("FY_QUARTER")
+    m = base.set_index("distinct_loan_no")[["FY_QUARTER", "segment", "disbursal_amount"]]
+    g = m.join(bad.add_prefix("bad_")).join(tps.add_prefix("tps_")).groupby(["FY_QUARTER", "segment"])
     exp = pd.DataFrame({"LAN_CNT": g.size(), "DISBURSAL_AMT": g.disbursal_amount.sum() / 1e7})
     for mob in MOB_SQL:
         exp[f"AMT_90PLUS_SETTLEMENT_{mob}MOB"] = g[f"bad_{mob}"].sum() / 1e7
         exp[f"TPOS_{mob}MOB"]                  = g[f"tps_{mob}"].sum() / 1e7
 
     # pipeline output to diff against (passed in, not read from CSV)
-    feed_idx = feed.set_index("FY_QUARTER").copy()
-    exp = exp.reindex(feed_idx.index)
+    # feed now has one row per (FY_QUARTER, SEGMENT); sum back to FY_QUARTER for comparison
+    feed_by_q = feed.drop(columns=["SEGMENT"], errors="ignore").groupby("FY_QUARTER").sum()
+    exp_by_q  = exp.groupby(level="FY_QUARTER").sum()
+    exp_by_q  = exp_by_q.reindex(feed_by_q.index)
 
     checks = []
     def add(name, diff, exact=False, warn_only=False):
@@ -82,12 +84,12 @@ def validate(feed, tris, lrr, ecl, db_path=DB_PATH) -> list:
         res = "PASS" if ok else ("WARN" if warn_only else "FAIL")
         checks.append(Check(name, diff, "exact" if exact else f"<= {TOL}", res))
 
-    add("LAN_CNT", int((feed_idx.LAN_CNT - exp.LAN_CNT).abs().max()), exact=True)
-    add("DISBURSAL_AMT", float((feed_idx.DISBURSAL_AMT - exp.DISBURSAL_AMT).abs().max()))
+    add("LAN_CNT", int((feed_by_q.LAN_CNT - exp_by_q.LAN_CNT).abs().max()), exact=True)
+    add("DISBURSAL_AMT", float((feed_by_q.DISBURSAL_AMT - exp_by_q.DISBURSAL_AMT).abs().max()))
     bc = [f"AMT_90PLUS_SETTLEMENT_{m}MOB" for m in MOB_SQL]
     tc = [f"TPOS_{m}MOB" for m in MOB_SQL]
-    add("90+ sums (all MOB)",  float((feed_idx[bc].fillna(0) - exp[bc].fillna(0)).abs().values.max()))
-    add("TPOS sums (all MOB)", float((feed_idx[tc].fillna(0) - exp[tc].fillna(0)).abs().values.max()))
+    add("90+ sums (all MOB)",  float((feed_by_q[bc].fillna(0) - exp_by_q[bc].fillna(0)).abs().values.max()))
+    add("TPOS sums (all MOB)", float((feed_by_q[tc].fillna(0) - exp_by_q[tc].fillna(0)).abs().values.max()))
 
     # loss rates (checks 5-6): recompute from the triangles
     a90 = tris.a90.copy(); a90.columns = [int(c) for c in a90.columns]

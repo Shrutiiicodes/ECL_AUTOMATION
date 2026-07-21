@@ -59,7 +59,7 @@ xl_status = excel_validation.run_excel_validation(ecl.ecl_pct, REPORT_XLSX)  # P
 | Phase | Module | Pure function | Produces |
 |-------|--------|---------------|----------|
 | 0 | `scripts/base_loans.py` | *(standalone script, run via `python -m scripts.base_loans`)* | `data/db/ecl.db` — synthetic `base_loans` + long `performance` tables |
-| 1 | `src/sql_refactor.py` | `run() → SqlOutput(feed, sql)` | `data_ecl` feed (one row per FY_QUARTER); generated SQL replaces ~82 joins |
+| 1 | `src/sql_refactor.py` | `run() → SqlOutput(feed, sql)` | `data_ecl` feed (one row per FY_QUARTER × SEGMENT); generated SQL replaces ~82 joins |
 | 2 | `src/chain_ladder.py` | `run(feed, segment) → Triangles(r90, a90, rtp, atp, mat90, mattp, disb, feed)` | Completed 90+ / TPOS triangles (rate and amount) |
 | 3 | `src/loss_rate.py` | `run(a90, atp, feed) → LossRates(loss, mv90, mvtp)` | Movement tables + per-quarter loss rate at each anchor (72M, 84M, 120M) |
 | 4 | `src/final_ecl.py` | `run(loss, atp) → FinalECL(by_quarter, wavg, portfolio_tpos, ecl_pct)` | Disbursal-weighted average loss rate per observation window |
@@ -76,7 +76,7 @@ Every computed cell in the workbook is a **live Excel formula** (`fullCalcOnLoad
 | # | Tab | Contents |
 |---|-----|----------|
 | 1 | Summary | As-of date, cohort count, MOB grid, loss-rate anchors, headline window, headline weighted-avg loss rate, window total disbursal, ECL %, and the final-ECL rule |
-| 2 | DATA_ECL | The raw SQL feed, one row per FY_QUARTER (values) |
+| 2 | DATA_ECL | The raw SQL feed, one row per (FY_QUARTER, SEGMENT) (values) |
 | 3 | Pivot_ECL | RAW pivot: 90+ amount block + TPOS amount block, observed actuals only (immature cells blank, no yellow), each with a Grand Total |
 | 4 | Chain_Ladder | Chain-ladder triangles with live formulas: 90+ as % and TPOS as amount. Mature cells link to Pivot_ECL; immature (yellow) cells carry the development-factor formula |
 | 5 | Movements | TPOS movement (amount), TPOS movement (% of disbursal), 90+ movement (% of disbursal) at the yearly MOB levels |

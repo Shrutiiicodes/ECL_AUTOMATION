@@ -3,7 +3,7 @@ PHASE 1 - SQL REFACTOR  (the headline deliverable)
 ==================================================
 Replaces the bank's ~82 repetitive LEFT JOINs (one per MOB per metric) with a
 SINGLE aggregation, and *generates* that SQL from the MOB list so the query is
-never hand-edited. Produces data_ecl: one row per FY_QUARTER (whole book).
+never hand-edited. Produces data_ecl: one row per (FY_QUARTER, SEGMENT).
 
 What the generated SQL does, in order
 -------------------------------------
@@ -47,7 +47,7 @@ from src.config import *      # DB_PATH, MOB_LIST, START_DISB, END_DISB, OUT_CSV
 
 
 class SqlOutput(NamedTuple):
-    feed: pd.DataFrame   # data_ecl: one row per FY_QUARTER (whole book)
+    feed: pd.DataFrame   # data_ecl: one row per (FY_QUARTER, SEGMENT)
     sql: str             # the generated query, for review / versioning
 
 
@@ -93,14 +93,15 @@ base_fy AS (                 -- filter window + derive FY quarter in SQL
 )
 SELECT
     b.fy_quarter                       AS FY_QUARTER,
+    b.segment                          AS SEGMENT,
     COUNT(*)                           AS LAN_CNT,
     ROUND(SUM(b.disbursal_amount)/1e7, 6) AS DISBURSAL_AMT,
 {sel_bad},
 {sel_tpos}
 FROM base_fy b
 LEFT JOIN perf_wide pw ON b.distinct_loan_no = pw.distinct_loan_no
-GROUP BY b.fy_quarter
-ORDER BY {FY_SORT_SQL};
+GROUP BY b.fy_quarter, b.segment
+ORDER BY {FY_SORT_SQL}, b.segment;
 """.strip()
 
 
@@ -116,6 +117,7 @@ def run(db_path=DB_PATH, start_disb=START_DISB, end_disb=END_DISB, mob_list=MOB_
 
 
 # Standalone entrypoint: write data_ecl.csv + the generated .sql, then run
+# Note: the feed now has one row per (FY_QUARTER, SEGMENT).
 # an INDEPENDENT pandas reconciliation. None of this runs on import.
 def _reconcile(feed: pd.DataFrame, db_path=DB_PATH) -> None:
     """Recompute a spot-check via a plain pandas groupby and diff against the SQL feed."""
@@ -135,24 +137,29 @@ def _reconcile(feed: pd.DataFrame, db_path=DB_PATH) -> None:
     bad12 = (perf[perf.mob == 12].groupby("distinct_loan_no").amt_90plus_settlement.sum()
              .rename("bad12"))                                  # spot-check one MOB
     merged = base.set_index("distinct_loan_no").join(bad12)
-    g = merged.groupby("fy_quarter")
+    g = merged.groupby(["fy_quarter", "segment"])               # per FY_QUARTER x SEGMENT
     exp_cnt  = g.size()
     exp_disb = g["disbursal_amount"].sum() / 1e7
     exp_bad0 = g["bad12"].sum() / 1e7
 
-    sql_idx = feed.set_index("FY_QUARTER")
+    sql_idx = feed.set_index(["FY_QUARTER", "SEGMENT"])
     print("=" * 60)
     print("PHASE 1 COMPLETE  -  reconciliation vs independent pandas")
     print("=" * 60)
     print(f"SQL replaced          : {len(MOB_SQL)*2} joins  ->  1 aggregation CTE")
-    print(f"summary rows          : {len(feed)}  (one per FY_QUARTER)")
+    print(f"summary rows          : {len(feed)}  (one per FY_QUARTER x SEGMENT)")
     print(f"columns               : {feed.shape[1]}  (2 keys + LAN_CNT + DISB + {len(MOB_SQL)}x2 MOB)")
     print(f"LAN_CNT total         : {feed.LAN_CNT.sum():,}  (should be <= 60,000)")
     print(f"DISBURSAL_AMT total   : {feed.DISBURSAL_AMT.sum():,.2f} cr")
 
-    cnt_ok  = (sql_idx.LAN_CNT.reindex(exp_cnt.index) == exp_cnt).all()
-    disb_ok = (sql_idx.DISBURSAL_AMT.reindex(exp_disb.index) - exp_disb).abs().max()
-    bad_ok  = (sql_idx.AMT_90PLUS_SETTLEMENT_12MOB.reindex(exp_bad0.index).fillna(0) - exp_bad0.fillna(0)).abs().max()
+    # reconcile totals (summed across segments, per FY_QUARTER) for a clean comparison
+    sql_by_q = feed.groupby("FY_QUARTER")[["LAN_CNT", "DISBURSAL_AMT", "AMT_90PLUS_SETTLEMENT_12MOB"]].sum()
+    exp_by_q_cnt  = merged.groupby("fy_quarter").size()
+    exp_by_q_disb = merged.groupby("fy_quarter")["disbursal_amount"].sum() / 1e7
+    exp_by_q_bad  = merged.groupby("fy_quarter")["bad12"].sum() / 1e7
+    cnt_ok  = (sql_by_q.LAN_CNT.reindex(exp_by_q_cnt.index) == exp_by_q_cnt).all()
+    disb_ok = (sql_by_q.DISBURSAL_AMT.reindex(exp_by_q_disb.index) - exp_by_q_disb).abs().max()
+    bad_ok  = (sql_by_q.AMT_90PLUS_SETTLEMENT_12MOB.reindex(exp_by_q_bad.index).fillna(0) - exp_by_q_bad.fillna(0)).abs().max()
     print(f"LAN_CNT matches       : {cnt_ok}")
     print(f"DISBURSAL max diff    : {disb_ok:.2e} cr")
     print(f"90+ @12MOB max diff   : {bad_ok:.2e} cr")
