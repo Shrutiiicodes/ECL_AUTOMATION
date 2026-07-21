@@ -1,12 +1,12 @@
 """
 config.py - SINGLE SOURCE OF TRUTH for every shared knob.
 
-Each pipeline script begins with `from config import *` and defines no shared
+Each pipeline module begins with `from src.config import *` and defines no shared
 constants of its own. To roll the quarter you change AS_OF here and nothing else.
 
-run_all.py does NOT import this - it only shells out to the scripts.
-Per-file Excel styles (HF, BD, C, ...) stay in their own scripts; they are
-presentation, not configuration.
+main.py and every phase module import from here. Per-file Excel styles
+(HF, BD, C, ...) stay in their own modules; they are presentation, not
+configuration.
 """
 from datetime import date
 

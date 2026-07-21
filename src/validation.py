@@ -4,15 +4,17 @@ VALIDATION HARNESS
 Independently recomputes each stage (NOT reusing pipeline code) and reconciles
 against the pipeline outputs. All-PASS => trust the run.
 
-Checks
+Checks (one loss_rate check per anchor in config.ANCHOR_MOBS, so the count
+scales with the anchor list; with [72, 84, 120] there are nine checks total):
   1 LAN_CNT              vs pandas groupby on raw tables (exact)
   2 DISBURSAL_AMT        vs pandas groupby
   3 90+ sums (all MOB)   vs pandas groupby
   4 TPOS sums (all MOB)  vs pandas groupby
-  5 loss_rate 84M        vs recompute from movement tables
-  6 loss_rate 120M       vs recompute from movement tables
-  7 weighted-avg LR      vs explicit SUMPRODUCT/SUM per window
-  8 plausibility         every reported weighted LR in (0,1)   [WARN, not FAIL]
+  5 loss_rate 72M        vs recompute from the amount triangles
+  6 loss_rate 84M        vs recompute from the amount triangles
+  7 loss_rate 120M       vs recompute from the amount triangles
+  8 weighted-avg LR      vs explicit SUMPRODUCT/SUM per window
+  9 plausibility         every reported weighted LR in (0,1)   [WARN, not FAIL]
 
 -------------------------------------------------------------------------------
 This module exposes:

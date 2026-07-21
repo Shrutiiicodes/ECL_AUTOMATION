@@ -3,7 +3,7 @@ PHASE 1 - SQL REFACTOR  (the headline deliverable)
 ==================================================
 Replaces the bank's ~82 repetitive LEFT JOINs (one per MOB per metric) with a
 SINGLE aggregation, and *generates* that SQL from the MOB list so the query is
-never hand-edited. Produces data_ecl: one row per FY_QUARTER x SEGMENT.
+never hand-edited. Produces data_ecl: one row per FY_QUARTER (whole book).
 
 What the generated SQL does, in order
 -------------------------------------
@@ -13,7 +13,7 @@ What the generated SQL does, in order
 2. base_fy   : take base_loans, filter to the disbursal window, and DERIVE
                fy_quarter from disbursal_date (Indian FY, 'FY16-Q1' style) --
                the SQL analog of the bank's concat/case expression.
-3. final     : join (1:1) and group by FY_QUARTER x SEGMENT ->
+3. final     : join (1:1) and group by FY_QUARTER ->
                LAN_CNT, DISBURSAL_AMT, 90+ per MOB, TPOS per MOB,
                all divided by 1e7 to report in CRORES (the bank's /10^7).
 
@@ -47,7 +47,7 @@ from src.config import *      # DB_PATH, MOB_LIST, START_DISB, END_DISB, OUT_CSV
 
 
 class SqlOutput(NamedTuple):
-    feed: pd.DataFrame   # data_ecl: one row per FY_QUARTER x SEGMENT
+    feed: pd.DataFrame   # data_ecl: one row per FY_QUARTER (whole book)
     sql: str             # the generated query, for review / versioning
 
 
@@ -145,7 +145,7 @@ def _reconcile(feed: pd.DataFrame, db_path=DB_PATH) -> None:
     print("PHASE 1 COMPLETE  -  reconciliation vs independent pandas")
     print("=" * 60)
     print(f"SQL replaced          : {len(MOB_SQL)*2} joins  ->  1 aggregation CTE")
-    print(f"summary rows          : {len(feed)}  (FY_QUARTER x SEGMENT)")
+    print(f"summary rows          : {len(feed)}  (one per FY_QUARTER)")
     print(f"columns               : {feed.shape[1]}  (2 keys + LAN_CNT + DISB + {len(MOB_SQL)}x2 MOB)")
     print(f"LAN_CNT total         : {feed.LAN_CNT.sum():,}  (should be <= 60,000)")
     print(f"DISBURSAL_AMT total   : {feed.DISBURSAL_AMT.sum():,.2f} cr")

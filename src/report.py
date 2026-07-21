@@ -4,7 +4,7 @@ EXCEL REPORT GENERATION  (live-formula edition, mentor 4+3 tab layout)
 Sheet map (mirrors the manual workbook):
 
   Summary        headline as-of / ECL (links to Weighted_LR)
-  DATA_ECL       raw per-segment feed (values)
+  DATA_ECL       raw SQL feed, one row per FY_QUARTER (values)
   Pivot_ECL      RAW pivot: 90+ amount block + TPOS amount block, each with a
                  Grand Total. Observed cells only; immature cells are BLANK.
                  NO yellow - this is actuals, not projections.
@@ -16,7 +16,10 @@ Sheet map (mirrors the manual workbook):
                  chain-ladder formula, exactly as in the manual sheet.
   Movements      movement tables (read from Chain_Ladder):
                    TPOS movement amount, TPOS movement %, 90+ movement %
-  LossRate       per-quarter loss rate  = 90+@A / SUM(TPOS 12..A)   (from Chain_Ladder)
+  LossRate       per-quarter loss rate at each anchor A in ANCHOR_MOBS (72/84/120):
+                   = 90+@A / (DISB + SUM(TPOS 12,24,...,A-12))
+                 the denominator is read as one contiguous SUM(Movements!B:<A-12>)
+                 (B = disbursal, C.. = TPOS levels). Plus CURRENT_MOB / CURRENT_TPOS.
   Weighted_LR    disbursal-weighted average loss rate per window + final ECL
 
 Every computed cell is a live formula; validation.py reconciles independently.

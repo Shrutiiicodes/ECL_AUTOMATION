@@ -14,27 +14,26 @@ Maturity (replaces manual yellow-highlighting)
     had j months to develop: months_between(quarter_end, AS_OF) >= j.
     Cells beyond that are immature and get projected.
 
-Chain-ladder fill (anchored on the last actual value in each MOB column)
-    For an immature cell at (row R, MOB X):
-        val(R,X) = LAST_ACTUAL(X)
-                   * SUMPRODUCT(X[top..R-1], DISB[top..R-1])
-                   / SUMPRODUCT(X[top..R-2], DISB[top..R-2])
-    where LAST_ACTUAL(X) is the deepest OBSERVED cell in column X (the last
-    non-projected cohort). The leading term is FIXED to that observed anchor
-    rather than to the cell directly above, so the projection does NOT compound
-    down the column. This is the fix for the deep-MOB explosion: the previous
-    build multiplied each projected cell by a factor > 1 off the cell above,
-    so a column needing many projection steps (e.g. 120M for young cohorts)
-    ran to impossible values (>100% cumulative default). Anchoring on the last
-    actual applies a single bounded ratio to a fixed base instead.
-    Runs identically on the 90+ (rate) and TPOS (amount) triangles.
-    IFERROR -> 0 when the denominator is 0 or no observed anchor exists.
+Chain-ladder fill (the bank's exact Excel development-factor formula)
+    For an immature cell at (row R, MOB X), where P is the previous MOB column:
+        val(R,X) = val(R,P)                                  # same cohort, prev MOB (Excel F46)
+                   * SUMPRODUCT(X[top..R-1], DISB[top..R-1]) # this-MOB col, rows above
+                   / SUMPRODUCT(P[top..R-1], DISB[top..R-1]) # prev-MOB col, rows above
+    i.e. the base is the SAME cohort's previous-MOB value and the multiplier is
+    the disbursal-weighted development ratio from the previous MOB to this MOB,
+    taken over the mature cohorts ABOVE this row. This reproduces the manual
+    sheet's =IFERROR(F46*SUMPRODUCT(G$4:G45,$B$4:$B45)/SUMPRODUCT(F$4:F45,$B$4:$B45),0)
+    cell-for-cell (chain_ladder_fill, and the live formulas emitted by report.py).
+    The 90+ triangle is filled in RATE space (% cells), then converted to amount
+    = rate x disbursal; the TPOS triangle is filled directly in AMOUNT space.
+    IFERROR -> 0 when the denominator is 0 or there is no previous column / no
+    row above.
 
 This module exposes a PURE function:
 
     run(feed_raw, segment=SEGMENT) -> Triangles(r90, a90, rtp, atp, mat90, mattp, disb, feed)
 
-`feed_raw` is the data_ecl summary (one row per FY_QUARTER x SEGMENT), exactly
+`feed_raw` is the data_ecl summary (one row per FY_QUARTER, whole book), exactly
 as produced by the SQL phase. run() reads nothing and writes nothing. CSV/Excel
 side effects live only in the `if __name__ == "__main__"` block below.
 """
@@ -183,21 +182,28 @@ def _print_summary(tris: Triangles) -> None:
     for q in labels[:3] + labels[-3:]:
         print(f"    {q}: {max_mature_mob(q, AS_OF)}")
 
-    # worked example: recompute one projected AMOUNT cell by hand and compare to engine
-    a90 = tris.a90                                                        # amounts (what the formula runs on)
-    # pick a cohort with >1 projected cell in a column so the anchor differs from the cell above
-    cj = next(j for j in range(len(MOB_LIST)) if (~mat90.iloc[:, j]).sum() >= 2)
-    proj_rows = [i for i in range(len(labels)) if not mat90.iloc[i, cj]]
-    ri = proj_rows[-1]                                                     # deepest projected row (anchor != above)
-    w  = disb.to_numpy()
-    anchor_row = np.where(mat90.iloc[:, cj].to_numpy())[0]
-    anchor = a90.iloc[anchor_row[-1], cj] if anchor_row.size else 0.0      # fixed last-actual base
-    num = np.nansum(a90.iloc[:ri,   cj].to_numpy() * w[:ri])
-    den = np.nansum(a90.iloc[:ri-1, cj].to_numpy() * w[:ri-1])
-    hand = anchor * num / den if den else 0.0
-    print(f"\nworked example (amount)  cell [{labels[ri]}, {MOB_LIST[cj]}MOB]:")
-    print(f"    anchor(last actual)={anchor:.6f}  factor={num/den if den else 0:.6f}")
-    print(f"    hand={hand:.8f}   engine={a90.iloc[ri,cj]:.8f}   match={np.isclose(hand, a90.iloc[ri,cj])}")
+    # worked example: recompute one projected cell by hand and compare to the engine.
+    # The 90+ triangle is filled in RATE space (the formula runs on % cells, then
+    # amount = rate x disb), so the hand-check uses r90, the rate triangle.
+    r90 = tris.r90
+    w   = disb.to_numpy()
+    # pick a projected cell whose previous-MOB base is non-zero, so the worked
+    # example actually exercises the development factor (not a trivial 0 * factor)
+    ri = cj = None
+    for j in range(1, len(MOB_LIST)):
+        for i in range(1, len(labels)):
+            if not mat90.iloc[i, j] and abs(r90.iloc[i, j - 1]) > 1e-9:
+                ri, cj = i, j
+                break
+        if ri is not None:
+            break
+    base = r90.iloc[ri, cj - 1]                                           # F46: same cohort, previous MOB (rate)
+    num  = np.nansum(r90.iloc[:ri, cj].to_numpy()     * w[:ri])           # SUMPRODUCT(this MOB col, DISB) rows above
+    den  = np.nansum(r90.iloc[:ri, cj - 1].to_numpy() * w[:ri])           # SUMPRODUCT(prev MOB col, DISB) rows above
+    hand = base * num / den if den else 0.0
+    print(f"\nworked example (rate)  cell [{labels[ri]}, {MOB_LIST[cj]}MOB]:")
+    print(f"    base(prev MOB)={base:.6f}  dev-factor={num/den if den else 0:.6f}")
+    print(f"    hand={hand:.8f}   engine={r90.iloc[ri,cj]:.8f}   match={np.isclose(hand, r90.iloc[ri,cj])}")
 
     # sanity: no NaN left, 90+ rate non-decreasing across MOB (cumulative defaults)
     print(f"\nNaN remaining         : {int(r90.isna().sum().sum())}  (should be 0)")

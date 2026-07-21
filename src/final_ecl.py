@@ -15,15 +15,17 @@ Windows requested (only the FY range and the anchor change):
     FY16-Q1 .. FY23-Q4  @  84M
     FY16-Q1 .. FY23-Q4  @ 120M
 
-Final step (mentor-confirmed): ECL = headline weighted_LR x window disbursal,
-i.e. the total disbursal amount of the quarters INSIDE the headline window.
+Final step: the reported ECL is the headline window's weighted-average loss
+rate itself, expressed as a percentage (`ecl_pct`). The headline window's total
+disbursal is carried alongside (TOTAL_DISB / shown on the Summary sheet) as the
+exposure it would be applied to, but run() returns the rate, not a rupee amount.
 CURRENT_TPOS (latest observed outstanding, the triangle diagonal) is still
 computed and shown for information only - it is NOT the exposure.
 
 -------------------------------------------------------------------------------
 This module exposes a PURE function:
 
-    run(loss, atp) -> FinalECL(by_quarter, wavg, portfolio_tpos, portfolio_ecl)
+    run(loss, atp) -> FinalECL(by_quarter, wavg, portfolio_tpos, ecl_pct)
 
 `loss` is the per-quarter loss table (loss_rate.run().loss); `atp` is the TPOS
 amount triangle (chain_ladder.run().atp). run() reads nothing and writes nothing.
