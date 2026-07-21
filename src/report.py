@@ -52,6 +52,7 @@ def anchor_letter(a):  return mob_letter(MOB_LIST.index(a))
 PIVOT = "Pivot_ECL"
 WORK  = "Chain_Ladder"
 MOVE  = "Movements"
+DATA  = "DATA_ECL"          # single source of truth for disbursal (raw feed)
 
 # Movements TPOS-amount block layout: A=FY, B=DISB, then ANCHORS from column C.
 # So a yearly MOB level sits at column 3 + its index in ANCHORS. This lets the
@@ -87,16 +88,17 @@ def _widths(ws):
 
 
 # ------------------------------------------------------------------ Pivot_ECL
-def write_raw_pivot_block(ws, r0, title, amt, disb):
+def write_raw_pivot_block(ws, r0, title, amt, disb, disb_ref=None):
     """RAW actuals block: observed amounts only (immature -> blank), NO yellow,
-    ending in a Grand Total (live =SUM). Returns (first_cohort_row, next_free_row)."""
+    ending in a Grand Total (live =SUM). Returns (first_cohort_row, next_free_row).
+    disb_ref(row)->formula: if given, col B links to DATA_ECL instead of a baked value."""
     tc = ws.cell(r0, 1, title); tc.font = TITF
     _hdr_row(ws, r0 + 1, "")
     top = r0 + 2
     for i, q in enumerate(amt.index):
         r = top + i
         ic = ws.cell(r, 1, q); ic.fill, ic.font, ic.alignment, ic.border = IFL, IFONT, C, BD
-        dc = ws.cell(r, 2, round(float(disb.iloc[i]), 6)); dc.number_format, dc.border, dc.alignment = CR, BD, C
+        dc = ws.cell(r, 2, disb_ref(r) if disb_ref else round(float(disb.iloc[i]), 6)); dc.number_format, dc.border, dc.alignment = CR, BD, C
         for j, m in enumerate(MOB_LIST):
             val = round(float(amt.iloc[i, j]), 6) if is_mature(q, m) else None   # immature -> blank
             c = ws.cell(r, mob_col(j), val)
@@ -111,7 +113,7 @@ def write_raw_pivot_block(ws, r0, title, amt, disb):
 
 
 # ------------------------------------------------------------------ Chain_Ladder
-def write_chain_ladder_block(ws, r0, title, amt, disb, kind, pivot_top):
+def write_chain_ladder_block(ws, r0, title, amt, disb, kind, pivot_top, disb_ref=None):
     """CHAIN-LADDER triangle with LIVE formulas.
        kind='rate'  -> cells are 90+/DISB (%)   ; mature = pivot/DISB
        kind='amount'-> cells are TPOS (crores)  ; mature = pivot value
@@ -122,6 +124,7 @@ def write_chain_ladder_block(ws, r0, title, amt, disb, kind, pivot_top):
     ratio from the previous MOB to this MOB over the cohorts above. Matches the
     numpy engine in chain_ladder.chain_ladder_fill cell-for-cell.
     `pivot_top` = first cohort row of the matching block on Pivot_ECL.
+    disb_ref(row)->formula: if given, col B links to DATA_ECL instead of a baked value.
     Returns (first_cohort_row, next_free_row)."""
     fmt = PC if kind == "rate" else CR
     tc = ws.cell(r0, 1, title); tc.font = TITF
@@ -131,7 +134,7 @@ def write_chain_ladder_block(ws, r0, title, amt, disb, kind, pivot_top):
         r = top + i
         pr = pivot_top + i                                  # matching Pivot_ECL row
         ic = ws.cell(r, 1, q); ic.fill, ic.font, ic.alignment, ic.border = IFL, IFONT, C, BD
-        dc = ws.cell(r, 2, round(float(disb.iloc[i]), 6)); dc.number_format, dc.border, dc.alignment = CR, BD, C
+        dc = ws.cell(r, 2, disb_ref(r) if disb_ref else round(float(disb.iloc[i]), 6)); dc.number_format, dc.border, dc.alignment = CR, BD, C
         for j, m in enumerate(MOB_LIST):
             X = mob_letter(j)
             c = ws.cell(r, mob_col(j))
@@ -161,6 +164,16 @@ def build_excel(feed, tris, lrr, ecl, path=OUT):
         df.columns = [int(c) for c in df.columns]
     cohorts = list(a90.index)
     n = len(cohorts)
+
+    # SINGLE SOURCE OF TRUTH for disbursal: every DISB cell in the workbook is a
+    # SUMIF back to DATA_ECL, keyed on the FY_QUARTER in column A of the SAME row.
+    # SUMIF (not a positional link) is robust to row order and still correct if the
+    # feed is ever split back out into multiple segment rows per quarter.
+    _feed_cols = list(feed.columns)
+    DE_FY   = get_column_letter(_feed_cols.index("FY_QUARTER") + 1)      # DATA_ECL FY column   (A)
+    DE_DISB = get_column_letter(_feed_cols.index("DISBURSAL_AMT") + 1)   # DATA_ECL disbursal   (C)
+    def disb_ref(r):
+        return f"=SUMIF('{DATA}'!${DE_FY}:${DE_FY},$A{r},'{DATA}'!${DE_DISB}:${DE_DISB})"
 
     wb = Workbook()
     wb.calculation.fullCalcOnLoad = True
@@ -202,14 +215,14 @@ def build_excel(feed, tris, lrr, ecl, path=OUT):
 
     # ------------------------------------------------------------- Pivot_ECL
     ws = wb.create_sheet(PIVOT); _widths(ws)
-    p90_top, nxt = write_raw_pivot_block(ws, 1,   "90+ SETTLEMENT (raw actuals, cr)", a90, disb)
-    ptp_top, _   = write_raw_pivot_block(ws, nxt, "TPOS (raw actuals, cr)",           atp, disb)
+    p90_top, nxt = write_raw_pivot_block(ws, 1,   "90+ SETTLEMENT (raw actuals, cr)", a90, disb, disb_ref)
+    ptp_top, _   = write_raw_pivot_block(ws, nxt, "TPOS (raw actuals, cr)",           atp, disb, disb_ref)
     ws.freeze_panes = ws.cell(3, MOB_COL0)
 
     # -------------------------------------------------------------- Chain_Ladder
     ws = wb.create_sheet(WORK); _widths(ws)
-    w90_top, nxt = write_chain_ladder_block(ws, 1,   "90+% (chain ladder, rate = 90+/DISB)", a90, disb, "rate",   p90_top)
-    wtp_top, _   = write_chain_ladder_block(ws, nxt, "TPOS (chain ladder, amount cr)",       atp, disb, "amount", ptp_top)
+    w90_top, nxt = write_chain_ladder_block(ws, 1,   "90+% (chain ladder, rate = 90+/DISB)", a90, disb, "rate",   p90_top, disb_ref)
+    wtp_top, _   = write_chain_ladder_block(ws, nxt, "TPOS (chain ladder, amount cr)",       atp, disb, "amount", ptp_top, disb_ref)
     ws.freeze_panes = ws.cell(3, MOB_COL0)
     w90_row = {q: w90_top + i for i, q in enumerate(cohorts)}
     wtp_row = {q: wtp_top + i for i, q in enumerate(cohorts)}
@@ -231,8 +244,8 @@ def build_excel(feed, tris, lrr, ecl, path=OUT):
             rr = r0 + 1 + i; sr = src_row[q]
             if row_map is not None: row_map[q] = rr
             ic = ws.cell(rr, 1, q); ic.fill, ic.font, ic.border = IFL, IFONT, BD
-            # disbursal amount (weight), linked from Chain_Ladder column B
-            dc = ws.cell(rr, 2, f"='{WORK}'!$B{sr}")
+            # disbursal amount (weight) -> single source of truth: DATA_ECL
+            dc = ws.cell(rr, 2, disb_ref(rr))
             dc.number_format, dc.alignment, dc.border = CR, C, BD
             for j, a in enumerate(ANCHORS):
                 cell = f"'{WORK}'!{anchor_letter(a)}{sr}"
@@ -266,7 +279,7 @@ def build_excel(feed, tris, lrr, ecl, path=OUT):
         q = rowq.FY_QUARTER; rr = 2 + i; lr_row[q] = rr
         w9, wt = w90_row[q], wtp_row[q]
         ic = ws.cell(rr, 1, q); ic.fill, ic.font = IFL, IFONT
-        ws.cell(rr, 2, f"='{WORK}'!$B{w9}").number_format = CR       # disbursal weight
+        ws.cell(rr, 2, disb_ref(rr)).number_format = CR             # disbursal weight -> DATA_ECL
         mr = mvtp_amt_row[q]                                 # this cohort's row in the Movements TPOS-amount block
         for k, A in enumerate(ANCHOR_MOBS):
             # num = 90+ amount @A = (Chain_Ladder 90+% @A) * DISB
