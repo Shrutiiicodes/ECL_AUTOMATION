@@ -22,7 +22,7 @@ End-to-end automation of the quarterly PL (NON-PA) ECL: **SQL → Python → Exc
 
 ### What it does
 
-Replaces the manual quarterly process — run SQL, paste into Excel, build pivots, mark the immature (yellow) cells, drag chain-ladder formulas, build movement tables, compute loss rates, take the weighted average — with a single run that produces a formatted `ECL_Report.xlsx` (7 tabs) plus a `validation_report.xlsx` proving the run reconciles.
+Replaces the manual quarterly process — run SQL, paste into Excel, build pivots, mark the immature (yellow) cells, drag chain-ladder formulas, build movement tables, compute loss rates, take the weighted average — with a single run that produces a formatted `ECL_Report.xlsx` (7 tabs) plus a `validation_report.xlsx` proving the run reconciles. An optional add-on (`src/segment_ecl.py`) computes the ECL for any single segment or the whole book over a user-chosen window/anchor and appends a `Segment_ECL` sheet to the report.
 
 ### One-command run
 
@@ -66,6 +66,7 @@ xl_status = excel_validation.run_excel_validation(ecl.ecl_pct, REPORT_XLSX)  # P
 | 5 | `src/report.py` | `build_excel(feed, tris, lrr, ecl, path) → Workbook` | `ECL_Report.xlsx` (7 tabs) |
 | 6 | `src/validation.py` | `validate(feed, tris, lrr, ecl, db_path) → list[Check]` | `validation_report.xlsx` (independent numeric reconciliation) |
 | 7 | `src/excel_validation.py` | `run_excel_validation(ecl_pct, path) → "PASS"/"FAIL"` | Console report validating the delivered **workbook** (structure + optional recalc) |
+| — | `src/segment_ecl.py` | `compute(segment, start, end, anchor) → SegmentECL` | Per-segment (or whole-book) ECL for a user-chosen window/anchor; appends `Segment_ECL` sheet |
 
 Phase 0 is **not** part of the ECL computation — it generates synthetic data because there is no real bank data available. It runs automatically only when `data/db/ecl.db` is missing, and is skipped otherwise.
 
@@ -82,6 +83,7 @@ Every computed cell in the workbook is a **live Excel formula** (`fullCalcOnLoad
 | 5 | Movements | TPOS movement (amount), TPOS movement (% of disbursal), 90+ movement (% of disbursal) at the yearly MOB levels |
 | 6 | LossRate | Per-quarter loss rate at 72M / 84M / 120M, plus CURRENT_MOB and CURRENT_TPOS. Projected anchors flagged yellow; observed-but-implausible (>100%) flagged red |
 | 7 | Weighted_LR | `SUMPRODUCT(LR, DISB)/SUM(DISB)` per observation window, plus the headline ECL % and its window disbursal |
+| 8 | Segment_ECL | *(optional, added by `src/segment_ecl.py`)* Per-segment weighted-avg loss rate for a chosen window/anchor, with per-quarter detail |
 
 ### The calculation
 
@@ -144,11 +146,10 @@ ECL_AUTOMATION/
 │   ├── report.py            ← Phase 5: ECL_Report.xlsx (7 tabs, live formulas)
 │   ├── validation.py        ← Phase 6: independent numeric reconciliation
 │   ├── excel_validation.py  ← Phase 7: structural + recalc check of the workbook
+│   ├── segment_ecl.py       ← add-on: per-segment ECL → Segment_ECL sheet
 │   └── __init__.py
 ├── scripts/
 │   └── base_loans.py        ← Phase 0: synthetic data generation → ecl.db
-├── docs/
-│   └── refactor.md          ← notes on the in-memory pipeline refactor
 ├── data/                    ← git-ignored: db/ecl.db and intermediate CSVs
 ├── output/                  ← git-ignored: ECL_Report.xlsx, validation_report.xlsx
 ├── requirements.txt         ← numpy, pandas, python-dateutil, openpyxl
@@ -166,6 +167,21 @@ pip install -r requirements.txt
 ```
 
 LibreOffice is **optional**: Phase 7 uses it to recalculate the delivered workbook headless and reconcile the computed values against the Python engine (Level 2). If LibreOffice is not installed, Phase 7 still runs its structural checks (Level 1) and reports SKIP for the recalc — it never fails just because LibreOffice is absent.
+
+### Per-segment ECL
+
+After running `main.py`, use `src/segment_ecl.py` to compute the ECL for any segment (1–5) or the whole book (`all`) over any FY window and anchor:
+
+```bash
+# interactive (prompts for segment / years / anchor):
+python -m src.segment_ecl
+
+# non-interactive:
+python -m src.segment_ecl --segment 3 --start FY20 --end FY23 --anchor 84
+python -m src.segment_ecl --segment all --start 2016 --end 2023 --anchor 120
+```
+
+It reuses the pipeline's pure functions (`chain_ladder`, `loss_rate`), filters the per-segment feed, and appends (or refreshes) a `Segment_ECL` sheet to `ECL_Report.xlsx`. With `--segment all` and the headline window it reproduces the whole-book ECL exactly.
 
 ### Real-data cutover
 

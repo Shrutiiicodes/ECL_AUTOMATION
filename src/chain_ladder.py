@@ -33,9 +33,10 @@ This module exposes a PURE function:
 
     run(feed_raw, segment=SEGMENT) -> Triangles(r90, a90, rtp, atp, mat90, mattp, disb, feed)
 
-`feed_raw` is the data_ecl summary (one row per FY_QUARTER, whole book), exactly
-as produced by the SQL phase. run() reads nothing and writes nothing. CSV/Excel
-side effects live only in the `if __name__ == "__main__"` block below.
+`feed_raw` is the data_ecl summary (one row per FY_QUARTER × SEGMENT), as produced
+by the SQL phase. `collapse_summary` aggregates it to one row per FY_QUARTER
+(optionally filtering to a single segment first). run() reads nothing and writes
+nothing. CSV/Excel side effects live only in the `if __name__ == "__main__"` block below.
 """
 
 import calendar
