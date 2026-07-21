@@ -28,9 +28,13 @@ END_DISB   = AS_OF.isoformat()
 MOB_SQL  = list(range(0, 121, 3))
 MOB_LIST = list(range(3, 121, 3))
 
-# loss-rate anchors.  LR_A = 90+ @ A / SUM(TPOS 12,24,...,A)
+# loss-rate anchors.
+#   NEW spec:  LR_A = 90+ @ A / ( DISB + SUM(TPOS 12,24,...,A-12) )
+#   the denominator is the DISBURSAL amount plus the TPOS at every yearly MOB
+#   up to ONE YEAR LESS than the anchor (72M stops at 60, 84M at 72, 120M at 108).
 ANCHOR_MOBS = [72, 84, 120]
-anchors_for = lambda a: list(range(12, a + 1, 12))
+anchors_for       = lambda a: list(range(12, a + 1, 12))   # 12..A  (display / movement grid)
+denom_anchors_for = lambda a: list(range(12, a, 12))       # 12..A-12  (loss-rate denominator)
 ALL_ANCHORS = anchors_for(max(ANCHOR_MOBS))     # 12..120, used by movement tables
 ANCHORS     = ALL_ANCHORS                       # alias used by report.py
 

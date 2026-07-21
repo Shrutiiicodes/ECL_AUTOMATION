@@ -8,10 +8,13 @@ Consumes the completed amount triangles and produces, per FY_QUARTER:
   loss table       : loss rate at EACH anchor
 
 Loss rate at anchor A:
-    LR_A(q) = 90+(q, A) / SUM( TPOS(q, 12), TPOS(q, 24), ..., TPOS(q, A) )
+    LR_A(q) = 90+(q, A) / ( DISBURSAL_AMT(q) + SUM( TPOS(q,12), TPOS(q,24), ..., TPOS(q, A-12) ) )
 
-  84M  -> anchors 12,24,36,48,60,72,84          (7 terms)   == the bank's =I97/SUM(B51:H51)
-  120M -> anchors 12,24,...,108,120             (10 terms)
+  the denominator is the DISBURSAL amount plus the TPOS at every yearly MOB up to
+  ONE YEAR LESS than the anchor (via denom_anchors_for):
+    72M  -> DISB + TPOS 12,24,36,48,60            (den = SUM(B:G) in Movements)
+    84M  -> DISB + TPOS 12,24,36,48,60,72         (den = SUM(B:H))   == the bank's =H105/SUM(B55:G55) shape
+    120M -> DISB + TPOS 12,24,...,108             (den = SUM(B:K))
 
 Anchors are MOB LEVELS at those ages (not deltas), matching Movements.
 All amounts in crores. DISBURSAL_AMT is carried through because it is the WEIGHT
@@ -56,16 +59,18 @@ def run(tri_90_amt: pd.DataFrame, tri_tpos_amt: pd.DataFrame, feed: pd.DataFrame
     mvtp = atp[ALL_ANCHORS].copy()
 
     # LOSS RATE PER ANCHOR   (IFERROR -> 0)
+    #   num = 90+ amount @ A
+    #   den = DISBURSAL_AMT  +  SUM(TPOS 12,24,...,A-12)   (one year less than anchor)
     loss = pd.DataFrame({"FY_QUARTER": a90.index, "DISBURSAL_AMT": disb.values})
     for A in ANCHOR_MOBS:
-        ancs = anchors_for(A)
+        ancs = denom_anchors_for(A)                       # 12..A-12
         num = a90[A]
-        den = atp[ancs].sum(axis=1)
+        den = disb + atp[ancs].sum(axis=1)                # DISB + TPOS(12..A-12)
         lr = (num / den).replace([np.inf, -np.inf], 0).fillna(0)
         lr = lr.where(den != 0, 0.0)
-        loss[f"NINETY_PLUS_{A}"] = num.values
-        loss[f"TPOS_SUM_12_{A}"] = den.values
-        loss[f"LOSS_RATE_{A}M"]  = lr.values
+        loss[f"NINETY_PLUS_{A}"]  = num.values
+        loss[f"DEN_DISB_TPOS_{A}"] = den.values           # disbursal + TPOS(12..A-12)
+        loss[f"LOSS_RATE_{A}M"]   = lr.values
 
     return LossRates(loss=loss, mv90=mv90, mvtp=mvtp)
 
@@ -79,15 +84,16 @@ def _print_summary(res: LossRates, tri_90_amt: pd.DataFrame) -> None:
     print(f"quarters              : {len(loss)}")
     for A in ANCHOR_MOBS:
         col = loss[f"LOSS_RATE_{A}M"]
-        print(f"  {A:>3}M anchors {str(anchors_for(A)):<44}")
+        print(f"  {A:>3}M  den = DISB + TPOS{str(denom_anchors_for(A)):<40}")
         print(f"       min/median/max = {col.min():.4%} / {col.median():.4%} / {col.max():.4%}"
               f"   |  >100%: {int((col > 1).sum())}")
 
     q = "FY18-Q1"
     if q in loss.FY_QUARTER.values:
         r = loss[loss.FY_QUARTER == q].iloc[0]
-        hd = float(mvtp.loc[q, anchors_for(84)].sum()); hn = float(tri_90_amt.loc[q, 84])
-        print(f"\nhand-check {q} @84M: {hn:.6f} / {hd:.6f} = {hn/hd:.6%}  (engine {r.LOSS_RATE_84M:.6%})")
+        hd = float(r.DISBURSAL_AMT) + float(mvtp.loc[q, denom_anchors_for(84)].sum())
+        hn = float(tri_90_amt.loc[q, 84])
+        print(f"\nhand-check {q} @84M: {hn:.6f} / (DISB+TPOS12..72={hd:.6f}) = {hn/hd:.6%}  (engine {r.LOSS_RATE_84M:.6%})")
 
 
 if __name__ == "__main__":

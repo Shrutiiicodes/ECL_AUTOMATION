@@ -51,6 +51,12 @@ def anchor_letter(a):  return mob_letter(MOB_LIST.index(a))
 
 PIVOT = "Pivot_ECL"
 WORK  = "Chain_Ladder"
+MOVE  = "Movements"
+
+# Movements TPOS-amount block layout: A=FY, B=DISB, then ANCHORS from column C.
+# So a yearly MOB level sits at column 3 + its index in ANCHORS. This lets the
+# loss-rate denominator be one contiguous SUM(B:<last>) exactly like the manual sheet.
+def move_amt_col(mob):  return get_column_letter(3 + ANCHORS.index(mob))
 
 
 def quarter_end(label):
@@ -210,17 +216,24 @@ def build_excel(feed, tris, lrr, ecl, path=OUT):
 
     # --------------------------------------------------------- Movements
     ws = wb.create_sheet("Movements")
-    def mv_block(r0, title, prefix, kind, src_row, src_is_rate_block):
+    def mv_block(r0, title, prefix, kind, src_row, src_is_rate_block, row_map=None):
         """kind: 'amount' (link), 'pct' (link/DISB). src_row maps cohort->Chain_Ladder row.
-        src_is_rate_block True means the Chain_Ladder source cells are ALREADY %."""
+        src_is_rate_block True means the Chain_Ladder source cells are ALREADY %.
+        row_map (optional): filled with cohort->this-block data row, so downstream
+        sheets (LossRate) can reference the block's DISB+TPOS row as one range."""
         fmt = CR if kind == "amount" else PC
         tc = ws.cell(r0, 1, title); tc.font = Font(bold=True, size=10)
         r0 += 1
-        for j, h in enumerate(["FY_QUARTER"] + [f"{prefix}{m}MOB" for m in ANCHORS], 1):
+        # header now carries a DISB_AMT column right after FY_QUARTER
+        for j, h in enumerate(["FY_QUARTER", "DISB_AMT"] + [f"{prefix}{m}MOB" for m in ANCHORS], 1):
             c = ws.cell(r0, j, h); c.fill, c.font, c.alignment, c.border = HF, HFONT, C, BD
         for i, q in enumerate(cohorts):
             rr = r0 + 1 + i; sr = src_row[q]
+            if row_map is not None: row_map[q] = rr
             ic = ws.cell(rr, 1, q); ic.fill, ic.font, ic.border = IFL, IFONT, BD
+            # disbursal amount (weight), linked from Chain_Ladder column B
+            dc = ws.cell(rr, 2, f"='{WORK}'!$B{sr}")
+            dc.number_format, dc.alignment, dc.border = CR, C, BD
             for j, a in enumerate(ANCHORS):
                 cell = f"'{WORK}'!{anchor_letter(a)}{sr}"
                 if kind == "amount":
@@ -229,13 +242,15 @@ def build_excel(feed, tris, lrr, ecl, path=OUT):
                     f = f"={cell}"
                 else:                                       # amount -> % of DISB
                     f = f"=IFERROR({cell}/'{WORK}'!$B{sr},0)"
-                c = ws.cell(rr, 2 + j, f)
+                c = ws.cell(rr, 3 + j, f)                    # MOB cols now start at column C
                 c.number_format, c.alignment, c.border = fmt, C, BD
+                if not is_mature(q, a): c.fill = YEL         # projected cohort/MOB -> yellow (mirrors Chain_Ladder)
         return r0 + 1 + len(cohorts)
-    end = mv_block(1,       "TPOS movement (amount, cr)",     "TPOS_AMT_",   "amount", wtp_row, False)
+    mvtp_amt_row = {}   # cohort -> row in the "TPOS movement (amount)" block (has DISB in col B)
+    end = mv_block(1,       "TPOS movement (amount, cr)",     "TPOS_AMT_",   "amount", wtp_row, False, mvtp_amt_row)
     end = mv_block(end + 2, "TPOS movement (% of disbursal)", "TPOS_PCT_",   "pct",    wtp_row, False)
     end = mv_block(end + 2, "90+ movement (% of disbursal)",  "90PLUS_PCT_", "pct",    w90_row, True)
-    ws.column_dimensions["A"].width = 12
+    ws.column_dimensions["A"].width = 12; ws.column_dimensions["B"].width = 12
 
     # -------------------------------------------------------------- LossRate
     ws = wb.create_sheet("LossRate")
@@ -252,12 +267,20 @@ def build_excel(feed, tris, lrr, ecl, path=OUT):
         w9, wt = w90_row[q], wtp_row[q]
         ic = ws.cell(rr, 1, q); ic.fill, ic.font = IFL, IFONT
         ws.cell(rr, 2, f"='{WORK}'!$B{w9}").number_format = CR       # disbursal weight
+        mr = mvtp_amt_row[q]                                 # this cohort's row in the Movements TPOS-amount block
         for k, A in enumerate(ANCHOR_MOBS):
-            # 90+ amount@A = (Chain_Ladder 90+% @A) * DISB ; TPOS sum = Chain_Ladder TPOS amounts
+            # num = 90+ amount @A = (Chain_Ladder 90+% @A) * DISB
+            # den = DISB + SUM(TPOS 12,24,...,A-12)   (one year less than the anchor),
+            #       read as ONE contiguous range off the Movements sheet:
+            #       B = DISB, C..<A-12> = TPOS levels  ->  SUM(Movements!B:<A-12>)
+            #       72M -> SUM(B:G) | 84M -> SUM(B:H) | 120M -> SUM(B:K)
             num = f"'{WORK}'!{anchor_letter(A)}{w9}*'{WORK}'!$B{w9}"
-            den = "+".join(f"'{WORK}'!{anchor_letter(a)}{wt}" for a in anchors_for(A))
+            den = f"SUM('{MOVE}'!$B{mr}:{move_amt_col(A - 12)}{mr})"
             cc = ws.cell(rr, 3 + k, f"=IFERROR(({num})/({den}),0)"); cc.number_format = PC
-            if rowq[f"LOSS_RATE_{A}M"] > 1: cc.fill = WARN
+            if not is_mature(q, A):                          # anchor not yet observed -> projected -> yellow
+                cc.fill = YEL
+            elif rowq[f"LOSS_RATE_{A}M"] > 1:                # observed but implausible -> red
+                cc.fill = WARN
         ws.cell(rr, col_mob, int(rowq.CURRENT_MOB))
         cm = anchor_letter(int(rowq.CURRENT_MOB)) if int(rowq.CURRENT_MOB) in MOB_LIST else mob_letter(0)
         ws.cell(rr, col_tp, f"='{WORK}'!{cm}{wt}").number_format = CR
@@ -295,6 +318,21 @@ def build_excel(feed, tris, lrr, ecl, path=OUT):
     ws.cell(r0 + 1, 2, f"=F{headline_row}").number_format = CR
     for col, w in zip("ABCDEFGH", [20, 10, 10, 9, 9, 14, 13, 14]):
         ws.column_dimensions[col].width = w
+
+    # ------------------------------------------------------------ tab colors
+    # give every sheet a distinct tab colour so the workbook reads at a glance
+    TAB_COLORS = {
+        "Summary":      "1F4E78",   # dark blue
+        "DATA_ECL":     "305496",   # medium blue
+        "Pivot_ECL":    "548235",   # green
+        "Chain_Ladder": "7030A0",   # purple
+        "Movements":    "C55A11",   # orange
+        "LossRate":     "BF8F00",   # gold
+        "Weighted_LR":  "C00000",   # red
+    }
+    for name, color in TAB_COLORS.items():
+        if name in wb.sheetnames:
+            wb[name].sheet_properties.tabColor = color
 
     wb.save(path)
     return wb

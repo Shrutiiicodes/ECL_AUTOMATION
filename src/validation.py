@@ -91,8 +91,9 @@ def validate(feed, tris, lrr, ecl, db_path=DB_PATH) -> list:
     a90 = tris.a90.copy(); a90.columns = [int(c) for c in a90.columns]
     atp = tris.atp.copy(); atp.columns = [int(c) for c in atp.columns]
     loss = lrr.loss.set_index("FY_QUARTER")
+    disb = loss["DISBURSAL_AMT"].reindex(a90.index)          # weight = disbursal per cohort
     for A in ANCHOR_MOBS:
-        den = atp[anchors_for(A)].sum(axis=1)
+        den = disb + atp[denom_anchors_for(A)].sum(axis=1)   # DISB + TPOS(12..A-12)
         lr = (a90[A] / den).replace([np.inf, -np.inf], 0).fillna(0)
         add(f"loss_rate {A}M", float((loss[f"LOSS_RATE_{A}M"] - lr.reindex(loss.index)).abs().max()))
 
